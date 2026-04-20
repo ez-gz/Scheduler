@@ -1,0 +1,66 @@
+{
+  "pollIntervalSeconds": 60,
+  "windows": [
+    {
+      "days": [
+        1
+      ],
+      "startHour": 6,
+      "endHour": 19
+    },
+    {
+      "days": [
+        2
+      ],
+      "startHour": 0,
+      "endHour": 19
+    },
+    {
+      "days": [
+        3
+      ],
+      "startHour": 0,
+      "endHour": 19
+    },
+    {
+      "days": [
+        4
+      ],
+      "startHour": 0,
+      "endHour": 19
+    },
+    {
+      "days": [
+        5
+      ],
+      "startHour": 0,
+      "endHour": 11
+    }
+  ],
+  "usageLimits": {
+    "claude": {
+      "enabled": true,
+      "weeklyBudgetPct": 70,
+      "cacheTtlSeconds": 900
+    },
+    "codex": {
+      "enabled": true,
+      "weeklyBudgetPct": 50
+    }
+  },
+  "dirScanRoots": [
+    "~",
+    "~/Documents",
+    "~/Documents/personal",
+    "~/Documents/work",
+    "~/Projects",
+    "~/code",
+    "~/dev",
+    "~/src"
+  ],
+  "features": {
+    "durableWorktrees": false,
+    "codexYuckyBranch": false
+  },
+  "maxConcurrent": 1
+}

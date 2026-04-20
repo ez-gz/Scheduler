@@ -1,0 +1,15 @@
+{
+  "name": "scheduler",
+  "version": "0.1.0",
+  "description": "Async task queue that runs claude-code sessions on your behalf within configured time windows and usage limits",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "worker": "node src/worker/poller.js",
+    "web": "node src/web/server.js",
+    "tunnel": "bash src/tunnel.sh"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scheduler — Admin</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0f0f0f; --surface: #181818; --surface2: #222; --border: #2c2c2c;
+  --accent: #7c6af7; --accent-dim: #3d3580; --text: #e8e8e8; --muted: #666;
+  --green: #4ade80; --red: #f87171; --yellow: #fbbf24;
+}
+body { background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; font-size: 15px; }
+header { position: sticky; top: 0; z-index: 10; background: rgba(15,15,15,0.92); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+header h1 { font-size: 17px; font-weight: 700; flex: 1; }
+header a { color: var(--muted); font-size: 13px; text-decoration: none; padding: 4px 8px; }
+main { max-width: 780px; margin: 0 auto; padding: 20px 16px 60px; display: flex; flex-direction: column; gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
+.card h2 { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 14px; }
+.kv { display: flex; justify-content: space-between; align-items: baseline; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+.kv:last-child { border-bottom: none; }
+.kv .k { color: var(--muted); }
+.kv .v { font-weight: 500; text-align: right; max-width: 65%; word-break: break-word; }
+.ok { color: var(--green); } .warn { color: var(--yellow); } .err { color: var(--red); }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+button { padding: 9px 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface2); color: var(--text); font-size: 13px; cursor: pointer; transition: background 0.1s; }
+button:hover { background: #2a2a2a; }
+button.primary { background: var(--accent); border-color: var(--accent); color: white; }
+button.force { background: #2a1a00; border-color: var(--yellow); color: var(--yellow); }
+button.force:hover { background: #3a2a00; }
+button:disabled { opacity: 0.4; cursor: default; }
+
+/* Timeline */
+.timeline { display: flex; gap: 6px; align-items: stretch; height: 60px; margin-top: 8px; }
+.tl-col { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: help; }
+.tl-col[data-tooltip]:hover::after,
+.tl-col[data-tooltip]:focus-visible::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 220px;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(10,10,10,0.96);
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  pointer-events: none;
+  z-index: 5;
+}
+.tl-col:focus-visible { outline: 1px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+.tl-bar-wrap { flex: 1; width: 100%; display: flex; align-items: flex-end; }
+.tl-bar { width: 100%; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; opacity: 0.7; }
+.tl-bar.tok-bar { background: var(--green); }
+.tl-label { font-size: 10px; color: var(--muted); }
+
+/* Usage */
+.usage-bar-wrap { background: #111; border-radius: 4px; height: 5px; margin: 5px 0 10px; overflow: hidden; }
+.usage-bar-fill { height: 100%; border-radius: 4px; background: var(--accent); transition: width 0.4s; }
+.usage-bar-fill.warn { background: var(--yellow); }
+.usage-bar-fill.crit { background: var(--red); }
+.usage-note { font-size: 11px; color: var(--muted); margin-top: 8px; font-style: italic; }
+.no-data { font-size: 13px; color: var(--muted); padding: 8px 0; }
+.sparkline-wrap { display: flex; gap: 3px; align-items: flex-end; height: 28px; margin-top: 12px; }
+.spark-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.spark-bar { width: 100%; background: var(--accent); border-radius: 2px 2px 0 0; opacity: 0.55; min-height: 2px; }
+.spark-lbl { font-size: 9px; color: var(--muted); }
+.usage-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 540px) { .usage-grid { grid-template-columns: 1fr; } }
+.usage-panel { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+.usage-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
+.usage-title { font-size: 14px; font-weight: 700; }
+.usage-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.usage-stat { margin-top: 12px; }
+.usage-stat:first-of-type { margin-top: 6px; }
+.usage-stat-top { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
+.usage-stat-top .label { margin: 0; font-size: 12px; letter-spacing: 0; text-transform: none; color: var(--muted); }
+.usage-stat-top .value { font-weight: 700; }
+.usage-reset { font-size: 11px; color: var(--muted); }
+.usage-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.usage-small { padding: 6px 10px; font-size: 12px; }
+.usage-status { font-size: 11px; color: var(--muted); }
+.usage-provider-note { font-size: 11px; color: var(--muted); margin-top: 10px; line-height: 1.45; }
+
+/* Config inputs */
+label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; margin-top: 12px; }
+label:first-of-type { margin-top: 0; }
+input[type=number] {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 7px;
+  color: var(--text); font-size: 14px; padding: 8px 10px; outline: none; width: 100%;
+}
+input:focus { border-color: var(--accent); }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.save-row { margin-top: 16px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.save-msg { font-size: 13px; }
+
+/* ── Schedule grid ───────────────────────────────────────────────────────── */
+.sched-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+.sched-header h2 { margin-bottom: 0; }
+.sched-legend { display: flex; gap: 12px; font-size: 11px; color: var(--muted); }
+.sched-legend span { display: flex; align-items: center; gap: 5px; }
+.legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+.sched-grid-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.sched-grid {
+  display: grid;
+  grid-template-columns: 28px repeat(24, minmax(13px, 1fr));
+  gap: 2px;
+  min-width: 360px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.sched-hour-label {
+  font-size: 9px; color: var(--muted); text-align: center;
+  padding-bottom: 4px; line-height: 1;
+}
+.sched-day-label {
+  font-size: 11px; color: var(--muted); display: flex; align-items: center;
+  padding-right: 4px; font-weight: 500;
+}
+.sched-day-label.today { color: var(--accent); }
+.sched-cell {
+  height: 20px; border-radius: 3px; background: #1e1e1e; cursor: pointer;
+  border: 1px solid transparent; transition: background 0.08s;
+  touch-action: none;
+}
+.sched-cell.on { background: var(--accent-dim); border-color: var(--accent); }
+.sched-cell.current-hour { outline: 1px solid var(--yellow); outline-offset: -1px; }
+.sched-cell:hover { border-color: var(--muted); }
+
+.sched-hint { font-size: 11px; color: var(--muted); margin-top: 10px; }
+
+/* ngrok */
+.ngrok-cmd { background: var(--bg); border: 1px solid var(--border); border-radius: 7px; padding: 10px 12px; font-family: 'SF Mono', monospace; font-size: 13px; color: #aaa; margin-top: 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.copy-btn { background: none; border: 1px solid var(--border); color: var(--muted); font-size: 12px; padding: 4px 8px; border-radius: 5px; cursor: pointer; flex-shrink: 0; }
+.copy-btn:hover { color: var(--text); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Admin</h1>
+  <a href="/">Queue</a>
+  <a href="/settings.html">Settings</a>
+</header>
+
+<main>
+
+  <!-- Worker -->
+  <div class="card">
+    <h2>Worker</h2>
+    <div id="worker-rows"></div>
+    <div class="btn-row">
+      <button id="pause-btn" onclick="pauseWorker()">Pause</button>
+      <button id="resume-btn" onclick="resumeWorker()">Resume</button>
+      <button class="primary" onclick="pollNow()">Poll Now</button>
+      <button class="force" id="force-btn" onclick="doForcePull()" title="Pull next task immediately, ignoring window + usage checks">Force Pull</button>
+      <button class="force" id="reset-btn" onclick="doForceReset()" style="display:none;border-color:var(--red);color:var(--red)" title="Mark running task as failed and reset worker state (process keeps running)">⚠ Force Reset Worker</button>
+    </div>
+  </div>
+
+  <!-- Timeline -->
+  <div class="card">
+    <h2>Task Timeline (last 7 days)</h2>
+    <div class="timeline" id="timeline"></div>
+  </div>
+
+  <!-- Token chart -->
+  <div class="card">
+    <h2>Tokens / Day (last 7 days)</h2>
+    <div class="timeline" id="tok-chart"></div>
+  </div>
+
+  <!-- Usage -->
+  <div class="card">
+    <h2>Usage</h2>
+    <div class="usage-grid">
+      <div class="usage-panel">
+        <div class="usage-head">
+          <div>
+            <div class="usage-title">Claude Code</div>
+            <div class="usage-meta" id="usage-claude-meta">No snapshot yet</div>
+          </div>
+          <div class="usage-actions">
+            <button class="usage-small" id="refresh-claude-btn" onclick="refreshUsageProvider('claude')">Check Now</button>
+          </div>
+        </div>
+        <div id="usage-claude-body"></div>
+      </div>
+
+      <div class="usage-panel">
+        <div class="usage-head">
+          <div>
+            <div class="usage-title">OpenAI Codex</div>
+            <div class="usage-meta" id="usage-codex-meta">Loading…</div>
+          </div>
+          <div class="usage-actions">
+            <button class="usage-small" id="refresh-codex-btn" onclick="refreshUsageProvider('codex')">Refresh</button>
+          </div>
+        </div>
+        <div id="usage-codex-body"></div>
+      </div>
+    </div>
+    <div class="usage-provider-note">Codex reads local session files. Claude usage runs <code style="background:var(--surface2);padding:2px 5px;border-radius:3px">/usage</code> in a disposable tmux session and caches the result for scheduler gating.</div>
+  </div>
+
+  <!-- Window status -->
+  <div class="card">
+    <h2>Current Window</h2>
+    <div id="window-rows"></div>
+  </div>
+
+  <!-- Settings link -->
+  <div class="card" style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px">
+    <span style="font-size:13px;color:var(--muted)">Schedule, usage gates, and feature flags</span>
+    <a href="/settings.html" style="font-size:13px;color:var(--accent);text-decoration:none;font-weight:600">Settings →</a>
+  </div>
+
+</main>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let latestStatus = null;
+const USAGE_POLL_MS = 60000;
+
+// ── Status load ────────────────────────────────────────────────────────────
+
+async function load() {
+  const [sRes, statsRes] = await Promise.all([fetch('/api/status'), fetch('/api/queue/stats')]);
+  const s = await sRes.json();
+  const stats = await statsRes.json();
+  latestStatus = s;
+  renderWorker(s);
+  renderWindow(s.windowCheck);
+  renderTimeline(stats.timelineRich ?? stats.timeline);
+  renderTokenChart(stats.timelineRich);
+}
+
+function renderWorker(s) {
+  const elapsed = s.currentTask?.started
+    ? (() => { const ms = Date.now() - new Date(s.currentTask.started); const h = Math.floor(ms/3600000); const m = Math.floor((ms%3600000)/60000); return h > 0 ? `${h}h ${m}m` : `${m}m`; })()
+    : null;
+
+  document.getElementById('worker-rows').innerHTML = [
+    ['Status', s.paused ? '<span class="warn">Paused</span>' : s.running ? '<span class="ok">Running task</span>' : '<span class="ok">Idle</span>'],
+    ['Current task', s.currentTask ? `<span style="font-family:monospace;font-size:12px">${esc(s.currentTask.id)}</span> — ${esc(s.currentTask.task)}` : '—'],
+    ['Elapsed', elapsed ? `<span class="warn">${elapsed}</span>` : '—'],
+    ['Next queued', s.nextTask ? `${esc(s.nextTask.runner)} — ${esc(s.nextTask.task)}` : '—'],
+    ['Usage gate', s.usageCheck ? `<span class="${s.usageCheck.safe ? 'ok' : 'warn'}">${esc(s.usageCheck.reason)}</span>` : '—'],
+    ['Poll count', s.pollCount ?? '—'],
+    ['Last poll', s.lastPollResult ? `<span class="${s.lastPollResult.ok ? 'ok' : 'warn'}">${esc(s.lastPollResult.reason)}</span>` : '—'],
+  ].map(([k,v]) => `<div class="kv"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('');
+
+  document.getElementById('pause-btn').disabled = s.paused;
+  document.getElementById('resume-btn').disabled = !s.paused;
+  document.getElementById('force-btn').disabled = s.running;
+
+  const resetBtn = document.getElementById('reset-btn');
+  if (resetBtn) {
+    resetBtn.style.display = s.running ? '' : 'none';
+    resetBtn.dataset.taskId = s.currentTask?.id ?? '';
+  }
+}
+
+function renderWindow(w) {
+  if (!w) return;
+  document.getElementById('window-rows').innerHTML = `
+    <div class="kv"><span class="k">Currently allowed</span><span class="v ${w.allowed ? 'ok' : 'err'}">${w.allowed ? 'Yes' : 'No'}</span></div>
+    <div class="kv"><span class="k">Reason</span><span class="v" style="color:var(--muted)">${esc(w.reason ?? '')}</span></div>
+  `;
+}
+
+function renderTimeline(rich) {
+  if (!rich) return;
+  const entries = Object.entries(rich);
+  // Support both rich ({done,failed,...}) and legacy (plain count) formats
+  const isRich = typeof entries[0]?.[1] === 'object';
+  const total = ([,v]) => isRich ? (v.done + v.failed + v.cancelled) : v;
+  const max = Math.max(...entries.map(total), 1);
+  const dayLabels = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+  document.getElementById('timeline').innerHTML = entries.map(([date, v]) => {
+    const count = total([date, v]);
+    const pct = Math.round((count / max) * 100);
+    const d = new Date(date + 'T12:00:00');
+    const title = isRich
+      ? `${v.done} done, ${v.failed} failed${v.cancelled ? ', ' + v.cancelled + ' cancelled' : ''}${v.durationMs > 0 ? ' · ' + Math.round(v.durationMs / 60000) + 'm total' : ''} — ${date}`
+      : `${count} tasks on ${date}`;
+    const titleAttr = escAttr(title);
+    return `<div class="tl-col" data-tooltip="${titleAttr}" aria-label="${titleAttr}" tabindex="0">
+      <div class="tl-bar-wrap"><div class="tl-bar" style="height:${Math.max(pct,3)}%"></div></div>
+      <div class="tl-label">${dayLabels[d.getDay()]}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderTokenChart(rich) {
+  const el = document.getElementById('tok-chart');
+  if (!el || !rich) return;
+  const entries = Object.entries(rich);
+  const hasData = entries.some(([,v]) => (v.tokensIn + v.tokensOut) > 0);
+  if (!hasData) {
+    el.innerHTML = '<span style="font-size:13px;color:var(--muted)">No token data yet</span>';
+    return;
+  }
+  const max = Math.max(...entries.map(([,v]) => v.tokensIn + v.tokensOut), 1);
+  const dayLabels = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+  el.innerHTML = entries.map(([date, v]) => {
+    const total = v.tokensIn + v.tokensOut;
+    const pct = Math.round((total / max) * 100);
+    const d = new Date(date + 'T12:00:00');
+    const hrs = v.durationMs > 0 ? v.durationMs / 3600000 : 0;
+    const ratePart = hrs > 0 ? ` · ${Math.round(total / hrs).toLocaleString()} tok/hr` : '';
+    const title = `${total.toLocaleString()} tokens (${v.tokensIn.toLocaleString()} in, ${v.tokensOut.toLocaleString()} out)${ratePart} — ${date}`;
+    const titleAttr = escAttr(title);
+    return `<div class="tl-col" data-tooltip="${titleAttr}" aria-label="${titleAttr}" tabindex="0">
+      <div class="tl-bar-wrap"><div class="tl-bar tok-bar" style="height:${Math.max(pct,3)}%"></div></div>
+      <div class="tl-label">${dayLabels[d.getDay()]}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Worker actions ─────────────────────────────────────────────────────────
+
+async function doForceReset() {
+  const btn = document.getElementById('reset-btn');
+  const taskId = btn.dataset.taskId;
+  if (!confirm('Reset worker state and mark the running task as failed? The underlying process will keep running but the queue will unblock.')) return;
+  btn.disabled = true; btn.textContent = 'Resetting…';
+  try {
+    const calls = [fetch('/api/worker/reset', { method: 'POST' })];
+    if (taskId) calls.push(fetch(`/api/tasks/${taskId}/status`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ status: 'failed', error: 'manually force-reset via admin' }) }));
+    await Promise.all(calls);
+    setTimeout(() => { load(); }, 500);
+  } finally {
+    btn.disabled = false; btn.textContent = '⚠ Force Reset Worker';
+  }
+}
+
+async function pauseWorker()  { await fetch('/api/worker/pause',  {method:'POST'}); load(); }
+async function resumeWorker() { await fetch('/api/worker/resume', {method:'POST'}); load(); }
+async function pollNow()      { await fetch('/api/worker/poll',   {method:'POST'}); load(); }
+
+async function doForcePull() {
+  const btn = document.getElementById('force-btn');
+  btn.disabled = true; btn.textContent = 'Pulling…';
+  try {
+    const res = await fetch('/api/worker/force-pull', {method:'POST'});
+    const data = await res.json();
+    if (data.ok) {
+      btn.textContent = `Ran ${data.taskId}`;
+      setTimeout(() => { btn.textContent = 'Force Pull'; load(); }, 2000);
+    } else {
+      btn.textContent = data.reason ?? 'No tasks';
+      setTimeout(() => { btn.textContent = 'Force Pull'; btn.disabled = false; }, 2000);
+    }
+  } catch {
+    btn.textContent = 'Error'; btn.disabled = false;
+  }
+}
+
+// ── Usage ───────────────────────────────────────────────────────────────────
+
+async function loadUsage() {
+  const res = await fetch('/api/usage');
+  const usage = await res.json();
+  renderUsage(usage);
+}
+
+async function refreshUsageProvider(provider) {
+  const btn = document.getElementById(`refresh-${provider}-btn`);
+  if (btn) { btn.disabled = true; btn.textContent = provider === 'claude' ? 'Checking…' : 'Refreshing…'; }
+
+  try {
+    const cwd = latestStatus?.nextTask?.dir ?? '';
+    await fetch(`/api/usage/${provider}/refresh`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ cwd }),
+    });
+    await loadUsage();
+    await load();
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = provider === 'claude' ? 'Check Now' : 'Refresh';
+    }
+  }
+}
+
+function renderUsage(all) {
+  renderUsageProvider('claude', all.claude);
+  renderUsageProvider('codex', all.codex);
+}
+
+function renderUsageProvider(provider, usage) {
+  document.getElementById(`usage-${provider}-meta`).textContent = usage.available
+    ? `${usage.gate.safe ? 'Gate open' : 'Gate closed'} · ${fmtTs(usage.refreshedAt ?? usage.cachedAt)}`
+    : `${usage.reason ?? 'Unavailable'} · ${fmtTs(usage.refreshedAt ?? usage.cachedAt)}`;
+
+  const body = document.getElementById(`usage-${provider}-body`);
+  if (!usage.available) {
+    body.innerHTML = `
+      <div class="kv"><span class="k">Status</span><span class="v err">${esc(usage.reason ?? 'Unavailable')}</span></div>
+      <div class="kv"><span class="k">Policy</span><span class="v" style="color:var(--muted)">${esc(usage.gate?.reason ?? '—')}</span></div>
+    `;
+    return;
+  }
+
+  const budget = usage.limits?.weeklyBudgetPct ?? 100;
+  const budgetFloor = 100 - budget; // pctLeft at which gate closes
+  const weeklyPctLeft = usage.longWindow?.pctLeft ?? 0;
+  const codexWindowSummary = provider === 'codex' ? usage.windowPolicy?.summary : null;
+  const codexWeeklyTiming = provider === 'codex' ? usage.longWindow?.timing : null;
+  const codexWeeklyNote = codexWeeklyTiming?.state === 'reset-assumed'
+    ? `Assuming fresh weekly window. Last observed value was ${codexWeeklyTiming.observedPctLeft ?? 0}% left before the reset boundary.`
+    : '';
+  body.innerHTML = `
+    <div class="kv"><span class="k">Gate</span><span class="v ${usage.gate.safe ? 'ok' : 'warn'}">${usage.gate.safe ? 'Open' : 'Closed'}</span></div>
+    <div class="kv"><span class="k">Source</span><span class="v">${esc(usage.source ?? '—')}</span></div>
+    ${provider === 'claude' ? `<div class="kv"><span class="k">Cache</span><span class="v">${usage.cached ? (usage.stale ? 'stale' : 'fresh') : 'live refresh'}</span></div>` : ''}
+    ${codexWindowSummary ? `<div class="kv"><span class="k">Window state</span><span class="v">${esc(codexWindowSummary)}</span></div>` : ''}
+    ${usage.shortWindow ? `
+    <div class="usage-stat">
+      <div class="usage-stat-top"><span class="label">5h window</span><span class="value" style="color:var(--muted)">${usage.shortWindow.pctLeft}% left</span></div>
+      <div class="usage-bar-wrap"><div class="usage-bar-fill" style="width:${usage.shortWindow.pctLeft}%;opacity:0.35"></div></div>
+      <div class="usage-reset">${esc(usage.shortWindow.resetLabel ?? usage.shortWindow.resetTime ?? '—')}</div>
+    </div>` : ''}
+    <div class="usage-stat">
+      <div class="usage-stat-top"><span class="label">Weekly — budget ${budget}%</span><span class="value">${weeklyPctLeft}% left</span></div>
+      <div class="usage-bar-wrap"><div class="usage-bar-fill ${weeklyPctLeft <= budgetFloor ? 'crit' : weeklyPctLeft <= budgetFloor + 10 ? 'warn' : ''}" style="width:${weeklyPctLeft}%"></div></div>
+      <div class="usage-reset">${esc(usage.longWindow?.resetLabel ?? usage.longWindow?.resetTime ?? '—')}</div>
+    </div>
+    ${codexWeeklyNote ? `<div class="usage-provider-note">${esc(codexWeeklyNote)}</div>` : ''}
+    <div class="usage-provider-note">${esc(usage.gate.reason ?? '')}</div>
+  `;
+}
+
+// ── Util ───────────────────────────────────────────────────────────────────
+
+function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(s) { return esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+function fmtTs(s) { return s ? new Date(s).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) : 'now'; }
+// ── Init ───────────────────────────────────────────────────────────────────
+load(); loadUsage();
+setInterval(load, 5000);
+setInterval(loadUsage, USAGE_POLL_MS);
+</script>
+</body>
+</html>
