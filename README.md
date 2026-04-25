@@ -1,6 +1,6 @@
 # Scheduler
 
-Async task queue that runs `claude-code` sessions on your behalf — only within your configured time windows and usage limits. Post tasks from your phone via LAN (or ngrok), come back later to review the results.
+Async task queue that runs `claude-code` or `codex` sessions on your behalf — only within your configured time windows and usage limits. Post tasks from your phone via LAN (or ngrok), come back later to review the results.
 
 ## Requirements
 
