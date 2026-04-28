@@ -1,24 +1,74 @@
 # Scheduler
 
-Async task queue that runs `claude-code` or `codex` sessions on your behalf — only within your configured time windows and usage limits. Post tasks from your phone via LAN (or ngrok), come back later to review the results.
+Scheduler is a local control plane for routing coding tasks to either Claude Code or Codex from one web interface. It is designed for the specific case where your personal computer already has the right projects, credentials, tools, and agent subscriptions, but you want to submit and monitor work from anywhere.
+
+The normal deployment model is intentionally simple: run this repository on your computer, expose only that local web session through an authenticated ngrok tunnel, then send tasks to `claude-code` or `codex-plan`/Codex runners through the Scheduler UI. The agents execute on your machine, with your local shell environment, your local GitHub credentials, and dangerous full access enabled.
 
 ## Requirements
 
 - **macOS** — designed for macOS; Linux may work but is untested
 - **Node.js** v18+
-- **Claude Code CLI** (`claude`) — must be installed and authenticated
+- **Claude Code CLI** (`claude`) — install and authenticate it before queuing Claude tasks
+- **Codex CLI** (`codex`) — install and authenticate it before queuing Codex tasks
+- **GitHub CLI** (`gh`) — authenticate it if you want worktree tasks to push branches and open PRs
 - **tmux** — used to launch runner sessions and probe Claude usage (`brew install tmux`)
-- **ngrok** _(optional)_ — only needed for remote access via `npm run tunnel` (`brew install ngrok`)
+- **ngrok** — required for the intended remote-access flow (`brew install ngrok`)
 
-## Quick start
+## Install and run
 
 ```bash
+git clone <repo-url> Scheduler
+cd Scheduler
 npm install
-npm start        # web UI + worker (http://localhost:3747)
 ```
 
-Open `http://localhost:3747` to submit tasks. Open `/admin.html` for worker control and schedule config.
-The web server binds to `127.0.0.1` by default, so it is only reachable from the local machine unless you explicitly tunnel it.
+Authenticate the tools Scheduler will call on your behalf:
+
+```bash
+claude
+codex
+gh auth login
+ngrok config add-authtoken <your-ngrok-token>
+```
+
+Then start Scheduler in a local shell and leave that shell running:
+
+```bash
+npm start        # web UI + worker at http://localhost:3747
+```
+
+Open `http://localhost:3747` locally to submit tasks. Open `http://localhost:3747/admin.html` for worker control, schedule configuration, usage snapshots, and queue telemetry.
+
+By default the web server binds to `127.0.0.1`, so it is reachable only from the local machine until you create a tunnel.
+
+## Remote access with ngrok
+
+Start a second shell from the same repository and run:
+
+```bash
+npm run tunnel -- --auth scheduler-user:strong-password
+```
+
+Copy the HTTPS ngrok URL into your phone or another computer. ngrok enforces HTTP Basic Auth at its edge, so unauthenticated requests do not reach your laptop. The `--auth` flag is required by `src/tunnel.sh`; the tunnel will refuse to start without it.
+
+Keep both shells alive:
+
+- `npm start` runs the local Scheduler web server and worker.
+- `npm run tunnel -- --auth ...` exposes that local server through ngrok.
+
+For a durable setup, run both commands inside `tmux`, a terminal session manager, or your preferred process supervisor.
+
+## Operating model
+
+Scheduler does not create a hosted agent environment. It routes work into agent CLIs that are already installed and authenticated on your personal computer.
+
+- Tasks run in the selected project directory using your local filesystem, shell, environment variables, Git config, SSH keys, and credential helpers.
+- Claude runners call `claude` with `--dangerously-skip-permissions`.
+- Codex runners call `codex exec` with `--dangerously-bypass-approvals-and-sandbox`.
+- Worktree mode creates an isolated `scheduler/<task-id>` branch, runs the task there, then asks the selected agent to commit, push, and open a GitHub PR with your local `gh` credentials.
+- In-place mode runs directly in the selected directory and can resume supported agent sessions.
+
+Treat the ngrok URL like access to your development machine. Use a strong Basic Auth password, share it sparingly, and stop the tunnel when you do not need remote submission.
 
 ## Known limitations
 
@@ -115,15 +165,3 @@ Runners are shell scripts. They receive:
 Exit 0 = success. Any other code = failure. Stdout/stderr are captured and stored in the task record.
 
 To add a new runner: drop a `<name>.sh` script in `src/runners/`, then select it in the UI.
-
-## Remote access (ngrok)
-
-```bash
-npm run tunnel -- --auth user:pass
-```
-
-The `--auth` flag is required — the tunnel won't start without it. ngrok enforces HTTP Basic Auth at its edge so no unauthenticated traffic ever reaches your machine. Your browser or phone will prompt for the credentials when you open the ngrok URL.
-
-```bash
-brew install ngrok   # if you don't have it
-```
