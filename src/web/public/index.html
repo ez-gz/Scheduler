@@ -111,6 +111,33 @@ input:checked + .slider:before { transform: translateX(18px); }
 /* Toast */
 #toast { position: fixed; bottom: 84px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 500; opacity: 0; transition: opacity 0.2s; pointer-events: none; white-space: nowrap; z-index: 400; }
 #toast.show { opacity: 1; }
+
+/* Summary pop-out card */
+.summary-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 500; display: none; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(6px); }
+.summary-overlay.open { display: flex; }
+.summary-card { background: var(--surface); border: 1px solid var(--accent); border-radius: 14px; width: 100%; max-width: 700px; max-height: 88vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 0 80px rgba(124,106,247,0.2), 0 24px 80px rgba(0,0,0,0.7); }
+.summary-header { padding: 16px 18px 14px; border-bottom: 1px solid var(--border); background: linear-gradient(135deg, #1a1535 0%, #141420 100%); flex-shrink: 0; }
+.summary-prompt { font-size: 13px; color: var(--muted); line-height: 1.4; margin-bottom: 10px; font-style: italic; }
+.summary-meta-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.summary-timing { font-size: 11px; color: var(--muted); flex: 1; }
+.summary-copy-btn { padding: 4px 10px; font-size: 11px; font-weight: 500; border-radius: 5px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; transition: color 0.15s, border-color 0.15s; }
+.summary-copy-btn:hover { color: var(--text); border-color: #555; }
+.summary-close { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; padding: 0; line-height: 1; margin-left: 4px; }
+.summary-close:hover { color: var(--text); }
+.summary-body { flex: 1; overflow-y: auto; padding: 22px 22px 26px; }
+.summary-message { font-size: 14px; line-height: 1.75; color: #d4d4d4; white-space: pre-wrap; word-break: break-word; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+.summary-message strong { color: var(--text); font-weight: 600; }
+.summary-message .sum-h1 { display: block; font-size: 16px; color: var(--accent); margin: 14px 0 6px; }
+.summary-message .sum-h2 { display: block; font-size: 15px; color: var(--accent); margin: 12px 0 5px; }
+.summary-message .sum-h3 { display: block; font-size: 14px; color: #9d8fff; margin: 10px 0 4px; }
+.summary-message code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; background: #1c1c1c; border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; color: #a78bfa; }
+.summary-message pre { background: #0d0d0d; border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; overflow-x: auto; margin: 12px 0; white-space: pre; }
+.summary-message pre code { background: none; border: none; padding: 0; color: #bbb; font-size: 12px; }
+.summary-empty { color: var(--muted); font-size: 13px; text-align: center; padding: 32px 0; }
+
+/* Summary button on task card */
+.summary-btn { background: none; border: none; color: var(--accent); font-size: 13px; cursor: pointer; padding: 1px 5px; opacity: 0.75; transition: opacity 0.15s; line-height: 1; }
+.summary-btn:hover { opacity: 1; }
 </style>
 </head>
 <body>
@@ -190,6 +217,22 @@ input:checked + .slider:before { transform: translateX(18px); }
     <div class="hint" id="worktree-hint">Creates an isolated branch, commits work, pushes, opens a GitHub PR.</div>
 
     <button class="btn-primary" id="submit-btn" onclick="submitTask()">Add to Queue</button>
+  </div>
+</div>
+
+<!-- Summary pop-out card -->
+<div class="summary-overlay" id="summary-overlay" onclick="closeSummaryOverlay(event)">
+  <div class="summary-card">
+    <div class="summary-header">
+      <div class="summary-prompt" id="summary-prompt"></div>
+      <div class="summary-meta-row">
+        <span class="badge" id="summary-badge"></span>
+        <span class="summary-timing" id="summary-timing"></span>
+        <button class="summary-copy-btn" id="summary-copy-btn" onclick="copySummary()">copy</button>
+        <button class="summary-close" onclick="closeSummary()" title="Close">✕</button>
+      </div>
+    </div>
+    <div class="summary-body" id="summary-body"></div>
   </div>
 </div>
 
@@ -302,6 +345,7 @@ function taskCard(t, queuePos) {
           <div class="task-text">${esc(t.task)}</div>
           <div class="task-actions">
             <span class="badge ${t.status}">${t.status}</span>
+            ${t.finalMessage ? `<button class="summary-btn" onclick="openSummary(event,'${t.id}')" title="View agent summary">✦</button>` : ''}
             ${t.status === 'pending' ? `<button class="cancel-btn" onclick="cancelTask(event,'${t.id}')" title="Remove">×</button>` : ''}
             ${t.status === 'running' ? `<button class="cancel-btn" style="color:var(--yellow);font-size:13px;padding:2px 6px" onclick="forceFailTask(event,'${t.id}')" title="Force fail + reset worker">⚠ fail</button>` : ''}
             ${isExpandable ? `<span class="expand-arrow">▾</span>` : ''}
@@ -557,6 +601,81 @@ function toast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
 }
+
+// ── Summary pop-out ────────────────────────────────────────────────────────
+
+let summaryTask = null;
+
+async function openSummary(e, id) {
+  e.stopPropagation();
+  let task = allTasks.find(t => t.id === id);
+  if (!task?.finalMessage) {
+    const res = await fetch(`/api/tasks/${id}`);
+    task = await res.json();
+    outputCache[id] = task;
+  }
+  if (!task?.finalMessage) return;
+  summaryTask = task;
+
+  document.getElementById('summary-prompt').textContent = task.task;
+  const badge = document.getElementById('summary-badge');
+  badge.textContent = task.runner;
+  badge.className = 'badge ' + task.status;
+  const dur = task.started && task.completed
+    ? `${Math.round((new Date(task.completed) - new Date(task.started)) / 1000)}s · `
+    : '';
+  document.getElementById('summary-timing').textContent = dur + (task.completed ? timeAgo(task.completed) : '');
+  document.getElementById('summary-body').innerHTML = renderSummaryMarkdown(task.finalMessage);
+  document.getElementById('summary-overlay').classList.add('open');
+}
+
+function closeSummary() {
+  document.getElementById('summary-overlay').classList.remove('open');
+  summaryTask = null;
+}
+
+function closeSummaryOverlay(e) {
+  if (e.target === document.getElementById('summary-overlay')) closeSummary();
+}
+
+async function copySummary() {
+  if (!summaryTask?.finalMessage) return;
+  await navigator.clipboard.writeText(summaryTask.finalMessage);
+  const btn = document.getElementById('summary-copy-btn');
+  btn.textContent = 'copied!';
+  setTimeout(() => { btn.textContent = 'copy'; }, 1600);
+}
+
+function renderSummaryMarkdown(raw) {
+  // Pull out fenced code blocks first so inner content isn't escaped or re-processed
+  const blocks = [];
+  const withPlaceholders = raw.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+    const idx = blocks.length;
+    blocks.push(`<pre><code>${esc(code)}</code></pre>`);
+    return `\x00BLK${idx}\x00`;
+  });
+
+  let html = esc(withPlaceholders)
+    // Inline code
+    .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+    // Bold
+    .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+    // Headers (must be start-of-line after esc — esc doesn't touch # or newlines)
+    .replace(/^### ([^\n]+)/gm, '<span class="sum-h3">$1</span>')
+    .replace(/^## ([^\n]+)/gm,  '<span class="sum-h2">$1</span>')
+    .replace(/^# ([^\n]+)/gm,   '<span class="sum-h1">$1</span>');
+
+  // Restore code blocks
+  blocks.forEach((b, i) => { html = html.replace(`\x00BLK${i}\x00`, b); });
+
+  return `<div class="summary-message">${html}</div>`;
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('summary-overlay').classList.contains('open')) {
+    closeSummary();
+  }
+});
 
 // ── Init ───────────────────────────────────────────────────────────────────
 loadDirs();

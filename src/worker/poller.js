@@ -23,6 +23,45 @@ function parseSessionId(output) {
   return match?.[1] ?? null;
 }
 
+function parseFinalMessage(output) {
+  if (!output) return null;
+  const lines = output.split('\n');
+
+  // Claude --output-format json: type:"result" with result field
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    if (!line.startsWith('{')) continue;
+    try {
+      const d = JSON.parse(line);
+      if (d?.type === 'result' && typeof d?.result === 'string' && d.result) {
+        return d.result;
+      }
+    } catch {}
+  }
+
+  // Codex --json: assistant message event
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    if (!line.startsWith('{')) continue;
+    try {
+      const d = JSON.parse(line);
+      if (d?.type === 'message' && d?.role === 'assistant') {
+        if (typeof d.content === 'string' && d.content) return d.content;
+        if (Array.isArray(d.content)) {
+          const text = d.content
+            .filter(c => c.type === 'text' || c.type === 'output_text')
+            .map(c => c.text ?? c.output_text ?? '')
+            .filter(Boolean)
+            .join('\n');
+          if (text) return text;
+        }
+      }
+    } catch {}
+  }
+
+  return null;
+}
+
 // ── Core poll ─────────────────────────────────────────────────────────────
 
 export async function poll() {
@@ -75,6 +114,7 @@ export async function poll() {
       completed: new Date().toISOString(),
       output: result.stdout.slice(-20000),
       sessionId: parseSessionId(result.stdout),
+      finalMessage: parseFinalMessage(result.stdout),
     });
     console.log(`[worker] task ${task.id} done`);
   } catch (err) {
@@ -107,7 +147,7 @@ export async function forcePull() {
   try {
     queue.update(task.id, { status: 'running', started: new Date().toISOString() });
     const result = await run(task);
-    queue.update(task.id, { status: 'done', completed: new Date().toISOString(), output: result.stdout.slice(-20000), sessionId: parseSessionId(result.stdout) });
+    queue.update(task.id, { status: 'done', completed: new Date().toISOString(), output: result.stdout.slice(-20000), sessionId: parseSessionId(result.stdout), finalMessage: parseFinalMessage(result.stdout) });
     console.log(`[worker] force-pull: task ${task.id} done`);
     return { ok: true, taskId: task.id };
   } catch (err) {
