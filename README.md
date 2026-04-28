@@ -4,6 +4,9 @@ Scheduler is a local control plane for routing coding tasks to either Claude Cod
 
 The normal deployment model is intentionally simple: run this repository on your computer, expose only that local web session through an authenticated ngrok tunnel, then send tasks to `claude-code` or `codex-plan`/Codex runners through the Scheduler UI. The agents execute on your machine, with your local shell environment, your local GitHub credentials, and dangerous full access enabled.
 
+## TL;DR
+hello, this is Zubin. I use Scheduler to talk to my personal computer's coding agents when I'm away from my computer. It's quite nice to queue up a bunch of work while I'm either at work or out and about and still preserve the respective limits of my coding agents. I find this tool quite useful, it's just a place for me to dump in notes when I want to have a bunch of work assigned to offline agents. I've also built a lot of tools on top of this service such as automated routing for the respective model/best model for a specific task. Try it out, give me feedback, let me know if you like it or don't like it, etc. 
+
 ## Requirements
 
 - **macOS** — designed for macOS; Linux may work but is untested
