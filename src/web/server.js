@@ -11,10 +11,10 @@ import { getStatus, pause, resume, poll, forcePull, forceReset } from '../worker
 import { getDirs } from './dirs.js';
 import { getAllUsage } from '../scheduler/usageRunner.js';
 import { refreshUsage } from '../scheduler/usageService.js';
+import { loadConfig, saveConfig } from '../scheduler/windowCheck.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(__dirname, 'public');
-const CONFIG_FILE = join(__dirname, '../../configs/schedule.json');
 const TERMINALS_FILE = join(__dirname, '../../data/terminals.json');
 const execFileAsync = promisify(execFile);
 
@@ -613,7 +613,7 @@ app.post('/api/worker/force-pull', async (req, res) => {
 
 app.get('/api/config', (req, res) => {
   try {
-    res.json(JSON.parse(readFileSync(CONFIG_FILE, 'utf8')));
+    res.json(loadConfig());
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -623,7 +623,7 @@ app.put('/api/config', (req, res) => {
   try {
     const config = req.body;
     if (typeof config !== 'object' || !config) return res.status(400).json({ error: 'invalid config' });
-    writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
+    saveConfig(config);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

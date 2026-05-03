@@ -1,12 +1,19 @@
-import { readFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const CONFIG_FILE = join(__dirname, '../../configs/schedule.json');
+export const CONFIG_FILE = join(__dirname, '../../configs/schedule.json');
+export const EXAMPLE_CONFIG_FILE = join(__dirname, '../../configs/schedule.example.json');
 
 export function loadConfig() {
-  return JSON.parse(readFileSync(CONFIG_FILE, 'utf8'));
+  const path = existsSync(CONFIG_FILE) ? CONFIG_FILE : EXAMPLE_CONFIG_FILE;
+  return JSON.parse(readFileSync(path, 'utf8'));
+}
+
+export function saveConfig(config) {
+  mkdirSync(dirname(CONFIG_FILE), { recursive: true });
+  writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
 }
 
 // Returns { allowed: boolean, reason: string }
