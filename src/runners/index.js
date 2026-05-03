@@ -18,6 +18,7 @@ export function run(task) {
       TASK_TEXT: task.task,
       TASK_DIR: task.dir,
       TASK_WORKTREE: String(task.worktree ?? false),
+      TASK_DURABLE_WORKTREE: String(task.durableWorktree ?? false),
       TASK_RESUME_SESSION_ID: task.resumeSessionId ?? '',
       TASK_FORK_SESSION: String(task.forkSession ?? false),
     };

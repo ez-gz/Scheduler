@@ -7,6 +7,7 @@
 #   TASK_TEXT     — full task description piped into codex exec via stdin
 #   TASK_DIR      — directory to run in
 #   TASK_WORKTREE — "true" to create a worktree
+#   TASK_DURABLE_WORKTREE — "true" to keep worktree after completion/failure
 
 set -euo pipefail
 
@@ -16,10 +17,11 @@ set -euo pipefail
 : "${TASK_ID:?TASK_ID is required}"
 
 TASK_WORKTREE="${TASK_WORKTREE:-false}"
+TASK_DURABLE_WORKTREE="${TASK_DURABLE_WORKTREE:-false}"
 CODEX_BIN="${CODEX_BIN:-codex}"
 
 RUNNER_NAME="codex-${MODEL}"
-echo "[${RUNNER_NAME}] task=$TASK_ID model=$MODEL worktree=$TASK_WORKTREE"
+echo "[${RUNNER_NAME}] task=$TASK_ID model=$MODEL worktree=$TASK_WORKTREE durable=$TASK_DURABLE_WORKTREE"
 echo "[${RUNNER_NAME}] dir=$TASK_DIR"
 
 run_codex() {
@@ -57,6 +59,7 @@ if [ "$TASK_WORKTREE" = "true" ]; then
   BRANCH="scheduler/${TASK_ID}"
   REPO_ROOT=$(cd "$TASK_DIR" && git rev-parse --show-toplevel)
   WORKTREE_PATH="${REPO_ROOT}/../worktree-${TASK_ID}"
+  echo "[SCHEDULER_WORKTREE] {\"repoRoot\":\"$REPO_ROOT\",\"path\":\"$WORKTREE_PATH\",\"branch\":\"$BRANCH\",\"durable\":$TASK_DURABLE_WORKTREE}"
 
   echo "[${RUNNER_NAME}] creating worktree: branch=$BRANCH path=$WORKTREE_PATH"
   cd "$REPO_ROOT"
@@ -79,9 +82,15 @@ ${TASK_TEXT}"
   run_codex "$WORKTREE_PATH" "$PUSH_PROMPT"
 
   cd "$REPO_ROOT"
-  git worktree remove "$WORKTREE_PATH" --force 2>/dev/null || true
-  git worktree prune 2>/dev/null || true
-  echo "[${RUNNER_NAME}] worktree removed, branch $BRANCH is on remote"
+  if [ "$TASK_DURABLE_WORKTREE" = "true" ]; then
+    echo "[SCHEDULER_WORKTREE_KEPT] $WORKTREE_PATH"
+    echo "[${RUNNER_NAME}] durable worktree kept at $WORKTREE_PATH"
+  else
+    git worktree remove "$WORKTREE_PATH" --force 2>/dev/null || true
+    git worktree prune 2>/dev/null || true
+    echo "[SCHEDULER_WORKTREE_REMOVED] $WORKTREE_PATH"
+    echo "[${RUNNER_NAME}] worktree removed, branch $BRANCH is on remote"
+  fi
 
 else
   echo "[${RUNNER_NAME}] running task in-place"

@@ -3,6 +3,9 @@ import { join, dirname } from 'path';
 import { readFileSync, writeFileSync, watch, existsSync, readdirSync, statSync, openSync, readSync, closeSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+import { randomBytes } from 'crypto';
 import * as queue from '../queue/store.js';
 import { getStatus, pause, resume, poll, forcePull, forceReset } from '../worker/poller.js';
 import { getDirs } from './dirs.js';
@@ -12,6 +15,8 @@ import { refreshUsage } from '../scheduler/usageService.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(__dirname, 'public');
 const CONFIG_FILE = join(__dirname, '../../configs/schedule.json');
+const TERMINALS_FILE = join(__dirname, '../../data/terminals.json');
+const execFileAsync = promisify(execFile);
 
 const app = express();
 app.use(express.json());
@@ -53,16 +58,126 @@ function parseTokensFromOutput(output) {
   };
 }
 
+function taskTitle(task) {
+  const text = String(task?.task ?? '').trim().replace(/\s+/g, ' ');
+  if (!text) return '(untitled)';
+  const firstSentence = text.match(/^(.{1,120}?)([.!?]\s|$)/)?.[1] ?? text.slice(0, 120);
+  return firstSentence.length < text.length ? `${firstSentence.trim()}...` : firstSentence.trim();
+}
+
+function projectName(dir) {
+  const parts = String(dir ?? '').split('/').filter(Boolean);
+  return parts.slice(-1)[0] ?? dir ?? '(unknown)';
+}
+
+function lastActivity(task) {
+  return task.completed ?? task.started ?? task.created ?? null;
+}
+
+function readTerminals() {
+  if (!existsSync(TERMINALS_FILE)) return [];
+  try {
+    return JSON.parse(readFileSync(TERMINALS_FILE, 'utf8'));
+  } catch {
+    return [];
+  }
+}
+
+function writeTerminals(items) {
+  writeFileSync(TERMINALS_FILE, JSON.stringify(items, null, 2));
+}
+
+function terminalName(id) {
+  return `scheduler-term-${id}`;
+}
+
+async function tmux(args) {
+  return execFileAsync('tmux', args, { maxBuffer: 4 * 1024 * 1024 });
+}
+
+async function terminalExists(sessionName) {
+  try {
+    await tmux(['has-session', '-t', sessionName]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function captureTerminal(sessionName) {
+  const { stdout } = await tmux(['capture-pane', '-t', sessionName, '-p', '-e', '-S', '-200']);
+  return stdout;
+}
+
+const TMUX_KEY_ALIASES = {
+  up: 'Up',
+  down: 'Down',
+  left: 'Left',
+  right: 'Right',
+  tab: 'Tab',
+  enter: 'Enter',
+  return: 'Enter',
+  esc: 'Escape',
+  escape: 'Escape',
+  backspace: 'BSpace',
+  delete: 'Delete',
+  home: 'Home',
+  end: 'End',
+  pgup: 'PageUp',
+  pageup: 'PageUp',
+  pgdown: 'PageDown',
+  pagedown: 'PageDown',
+  clear: 'C-l',
+  'ctrl-c': 'C-c',
+  ctrlc: 'C-c',
+  'ctrl-d': 'C-d',
+  ctrld: 'C-d',
+  'ctrl-l': 'C-l',
+  ctrll: 'C-l',
+  'ctrl-r': 'C-r',
+  ctrlr: 'C-r',
+};
+
+function normalizeTmuxKey(key) {
+  const normalized = String(key ?? '').trim().toLowerCase();
+  return TMUX_KEY_ALIASES[normalized] ?? null;
+}
+
+function safeWorktrees() {
+  return queue.list()
+    .filter(t => t.worktreeMeta?.path)
+    .map(t => ({
+      id: t.id,
+      taskId: t.id,
+      title: taskTitle(t),
+      status: t.status,
+      dir: t.dir,
+      runner: t.runner,
+      durable: t.durableWorktree === true || t.worktreeMeta?.durable === true,
+      path: t.worktreeMeta.path,
+      repoRoot: t.worktreeMeta.repoRoot,
+      branch: t.worktreeMeta.branch,
+      kept: t.worktreeMeta.kept === true,
+      removed: t.worktreeMeta.removed === true,
+      exists: existsSync(t.worktreeMeta.path),
+      created: t.created,
+      completed: t.completed,
+      cleanedAt: t.worktreeCleanedAt ?? null,
+    }));
+}
+
 // ── Queue API ─────────────────────────────────────────────────────────────
 
 app.post('/api/tasks', (req, res) => {
-  const { task, dir, worktree, runner, priority, resumeSessionId, forkSession } = req.body;
+  const { task, dir, worktree, durableWorktree, runner, priority, resumeSessionId, forkSession } = req.body;
   if (!task?.trim()) return res.status(400).json({ error: 'task is required' });
   if (!dir?.trim()) return res.status(400).json({ error: 'dir is required' });
+  const isWorktree = worktree === true || worktree === 'true';
   const created = queue.add({
     task: task.trim(),
     dir: dir.trim(),
-    worktree: worktree === true || worktree === 'true',
+    worktree: isWorktree,
+    durableWorktree: isWorktree && (durableWorktree === true || durableWorktree === 'true'),
     runner: runner ?? 'claude-sonnet',
     priority: Number(priority ?? 0),
     resumeSessionId: resumeSessionId ?? null,
@@ -122,6 +237,233 @@ app.get('/api/queue/stats', (req, res) => {
       return days;
     })(),
   });
+});
+
+app.get('/api/projects/summary', (req, res) => {
+  const tasks = queue.list();
+  const projects = new Map();
+
+  for (const task of tasks) {
+    const dir = task.dir ?? '(unknown)';
+    const current = projects.get(dir) ?? {
+      dir,
+      name: projectName(dir),
+      total: 0,
+      pending: 0,
+      running: 0,
+      done: 0,
+      failed: 0,
+      cancelled: 0,
+      lastActivity: null,
+      runnerMix: {},
+      worktrees: 0,
+      durableWorktrees: 0,
+      recent: [],
+    };
+
+    current.total++;
+    if (task.status in current) current[task.status]++;
+    current.runnerMix[task.runner ?? 'unknown'] = (current.runnerMix[task.runner ?? 'unknown'] ?? 0) + 1;
+    if (task.worktree) current.worktrees++;
+    if (task.durableWorktree || task.worktreeMeta?.kept) current.durableWorktrees++;
+
+    const activity = lastActivity(task);
+    if (activity && (!current.lastActivity || new Date(activity) > new Date(current.lastActivity))) {
+      current.lastActivity = activity;
+    }
+
+    current.recent.push({
+      id: task.id,
+      title: taskTitle(task),
+      status: task.status,
+      runner: task.runner,
+      created: task.created,
+      completed: task.completed,
+    });
+
+    projects.set(dir, current);
+  }
+
+  const data = [...projects.values()]
+    .map(project => ({
+      ...project,
+      recent: project.recent
+        .sort((a, b) => new Date(b.completed ?? b.created) - new Date(a.completed ?? a.created))
+        .slice(0, 5),
+    }))
+    .sort((a, b) => new Date(b.lastActivity ?? 0) - new Date(a.lastActivity ?? 0));
+
+  res.json({
+    totalProjects: data.length,
+    totalTasks: tasks.length,
+    projects: data,
+  });
+});
+
+app.get('/api/worktrees', (req, res) => {
+  res.json(safeWorktrees().reverse());
+});
+
+app.post('/api/worktrees/:id/cleanup', async (req, res) => {
+  const task = queue.list().find(t => t.id === req.params.id);
+  if (!task?.worktreeMeta?.path) return res.status(404).json({ error: 'worktree not found' });
+  const { path, repoRoot } = task.worktreeMeta;
+  if (!existsSync(path)) {
+    const updatedMeta = { ...task.worktreeMeta, kept: false, removed: true };
+    const updated = queue.update(task.id, { worktreeMeta: updatedMeta, worktreeCleanedAt: new Date().toISOString() });
+    return res.json({ ok: true, task: updated, alreadyGone: true });
+  }
+
+  try {
+    await execFileAsync('git', ['-C', repoRoot || task.dir, 'worktree', 'remove', path, '--force'], { maxBuffer: 1024 * 1024 });
+    await execFileAsync('git', ['-C', repoRoot || task.dir, 'worktree', 'prune'], { maxBuffer: 1024 * 1024 }).catch(() => {});
+    const updatedMeta = { ...task.worktreeMeta, kept: false, removed: true };
+    const updated = queue.update(task.id, { worktreeMeta: updatedMeta, worktreeCleanedAt: new Date().toISOString() });
+    res.json({ ok: true, task: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/terminals', async (req, res) => {
+  const terminals = readTerminals();
+  const enriched = await Promise.all(terminals.map(async term => ({
+    ...term,
+    alive: await terminalExists(term.sessionName),
+  })));
+  res.json(enriched.reverse());
+});
+
+app.post('/api/terminals', async (req, res) => {
+  const cwd = String(req.body?.cwd ?? homedir()).trim() || homedir();
+  const label = String(req.body?.name ?? '').trim();
+  if (!existsSync(cwd)) return res.status(400).json({ error: 'cwd does not exist' });
+
+  const id = randomBytes(4).toString('hex');
+  const sessionName = terminalName(id);
+  try {
+    await tmux(['new-session', '-d', '-s', sessionName, '-c', cwd]);
+    const term = {
+      id,
+      sessionName,
+      name: label || projectName(cwd),
+      cwd,
+      backend: 'tmux',
+      created: new Date().toISOString(),
+      killedAt: null,
+    };
+    writeTerminals([...readTerminals(), term]);
+    res.json({ ok: true, terminal: { ...term, alive: true } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/terminals/:id/snapshot', async (req, res) => {
+  const term = readTerminals().find(t => t.id === req.params.id);
+  if (!term) return res.status(404).json({ error: 'terminal not found' });
+  try {
+    const alive = await terminalExists(term.sessionName);
+    const output = alive ? await captureTerminal(term.sessionName) : '';
+    res.json({ ...term, alive, output });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/terminals/:id/stream', async (req, res) => {
+  const term = readTerminals().find(t => t.id === req.params.id);
+  if (!term) return res.status(404).json({ error: 'terminal not found' });
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  let last = '';
+  let closed = false;
+  async function tick() {
+    if (closed) return;
+    try {
+      const alive = await terminalExists(term.sessionName);
+      const output = alive ? await captureTerminal(term.sessionName) : '[session ended]';
+      if (output !== last) {
+        last = output;
+        res.write(`data: ${JSON.stringify({ alive, output })}\n\n`);
+      }
+    } catch (err) {
+      res.write(`data: ${JSON.stringify({ alive: false, error: err.message })}\n\n`);
+    }
+  }
+
+  await tick();
+  const interval = setInterval(tick, 1000);
+  req.on('close', () => {
+    closed = true;
+    clearInterval(interval);
+  });
+});
+
+app.post('/api/terminals/:id/input', async (req, res) => {
+  const term = readTerminals().find(t => t.id === req.params.id);
+  if (!term) return res.status(404).json({ error: 'terminal not found' });
+  const input = String(req.body?.input ?? '');
+  const enter = req.body?.enter !== false;
+  if (!input && !enter) return res.status(400).json({ error: 'input is required' });
+
+  try {
+    if (!(await terminalExists(term.sessionName))) return res.status(410).json({ error: 'terminal is not alive' });
+    if (input) await tmux(['send-keys', '-t', term.sessionName, '-l', input]);
+    if (enter) await tmux(['send-keys', '-t', term.sessionName, 'Enter']);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/terminals/:id/keys', async (req, res) => {
+  const term = readTerminals().find(t => t.id === req.params.id);
+  if (!term) return res.status(404).json({ error: 'terminal not found' });
+  const rawKeys = Array.isArray(req.body?.keys) ? req.body.keys : [req.body?.key];
+  const keys = rawKeys.map(normalizeTmuxKey);
+  if (!keys.length || keys.some(k => !k)) return res.status(400).json({ error: 'unsupported key' });
+
+  try {
+    if (!(await terminalExists(term.sessionName))) return res.status(410).json({ error: 'terminal is not alive' });
+    await tmux(['send-keys', '-t', term.sessionName, ...keys]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/terminals/:id/ctrl-c', async (req, res) => {
+  const term = readTerminals().find(t => t.id === req.params.id);
+  if (!term) return res.status(404).json({ error: 'terminal not found' });
+  try {
+    if (!(await terminalExists(term.sessionName))) return res.status(410).json({ error: 'terminal is not alive' });
+    await tmux(['send-keys', '-t', term.sessionName, 'C-c']);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/terminals/:id/kill', async (req, res) => {
+  const terminals = readTerminals();
+  const idx = terminals.findIndex(t => t.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'terminal not found' });
+  try {
+    const aliveBefore = await terminalExists(terminals[idx].sessionName);
+    if (aliveBefore) {
+      await tmux(['kill-session', '-t', terminals[idx].sessionName]);
+    }
+    const aliveAfter = await terminalExists(terminals[idx].sessionName);
+    terminals[idx] = { ...terminals[idx], killedAt: new Date().toISOString() };
+    writeTerminals(terminals);
+    res.json({ ok: !aliveAfter, terminal: { ...terminals[idx], alive: aliveAfter } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Single task (includes full output)
