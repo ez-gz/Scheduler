@@ -1,0 +1,45 @@
+{
+  "pollIntervalSeconds": 60,
+  "windows": [
+    {
+      "days": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "startHour": 9,
+      "endHour": 24
+    },
+    {
+      "days": [
+        6,
+        0
+      ],
+      "startHour": 14,
+      "endHour": 22
+    }
+  ],
+  "usageLimits": {
+    "claude": {
+      "enabled": true,
+      "weeklyBudgetPct": 80,
+      "cacheTtlSeconds": 900
+    },
+    "codex": {
+      "enabled": true,
+      "weeklyBudgetPct": 80
+    }
+  },
+  "dirScanRoots": [
+    "~",
+    "~/Documents",
+    "~/Projects"
+  ],
+  "features": {
+    "durableWorktrees": false,
+    "codexYuckyBranch": false
+  },
+  "maxConcurrent": 1
+}

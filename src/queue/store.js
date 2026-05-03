@@ -37,6 +37,8 @@ export function add(data) {
     model: 'claude-sonnet-4-6',
     priority: 0,
     worktree: false,
+    durableWorktree: false,
+    worktreeMeta: null,
     sessionId: null,
     resumeSessionId: null,
     forkSession: false,

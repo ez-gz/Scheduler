@@ -39,27 +39,36 @@ function parseFinalMessage(output) {
     } catch {}
   }
 
-  // Codex --json: assistant message event
+  // Codex --json: item.completed with item.type:"agent_message"
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i].trim();
     if (!line.startsWith('{')) continue;
     try {
       const d = JSON.parse(line);
-      if (d?.type === 'message' && d?.role === 'assistant') {
-        if (typeof d.content === 'string' && d.content) return d.content;
-        if (Array.isArray(d.content)) {
-          const text = d.content
-            .filter(c => c.type === 'text' || c.type === 'output_text')
-            .map(c => c.text ?? c.output_text ?? '')
-            .filter(Boolean)
-            .join('\n');
-          if (text) return text;
-        }
+      if (d?.type === 'item.completed' && d?.item?.type === 'agent_message') {
+        const text = d.item.text;
+        if (typeof text === 'string' && text.trim()) return text.trim();
       }
     } catch {}
   }
 
   return null;
+}
+
+function parseWorktreeMeta(output) {
+  if (!output) return null;
+  const line = output.split('\n').find(l => l.startsWith('[SCHEDULER_WORKTREE] '));
+  if (!line) return null;
+  try {
+    const meta = JSON.parse(line.replace('[SCHEDULER_WORKTREE] ', ''));
+    return {
+      ...meta,
+      kept: output.includes('[SCHEDULER_WORKTREE_KEPT]'),
+      removed: output.includes('[SCHEDULER_WORKTREE_REMOVED]'),
+    };
+  } catch {
+    return null;
+  }
 }
 
 // ── Core poll ─────────────────────────────────────────────────────────────
@@ -115,6 +124,7 @@ export async function poll() {
       output: result.stdout.slice(-20000),
       sessionId: parseSessionId(result.stdout),
       finalMessage: parseFinalMessage(result.stdout),
+      worktreeMeta: parseWorktreeMeta(result.stdout),
     });
     console.log(`[worker] task ${task.id} done`);
   } catch (err) {
@@ -123,6 +133,7 @@ export async function poll() {
       completed: new Date().toISOString(),
       error: err.message,
       output: ((err.stdout ?? '') + (err.stderr ?? '')).slice(-20000),
+      worktreeMeta: parseWorktreeMeta((err.stdout ?? '') + (err.stderr ?? '')),
     });
     console.error(`[worker] task ${task.id} failed:`, err.message);
   } finally {
@@ -147,11 +158,11 @@ export async function forcePull() {
   try {
     queue.update(task.id, { status: 'running', started: new Date().toISOString() });
     const result = await run(task);
-    queue.update(task.id, { status: 'done', completed: new Date().toISOString(), output: result.stdout.slice(-20000), sessionId: parseSessionId(result.stdout), finalMessage: parseFinalMessage(result.stdout) });
+    queue.update(task.id, { status: 'done', completed: new Date().toISOString(), output: result.stdout.slice(-20000), sessionId: parseSessionId(result.stdout), finalMessage: parseFinalMessage(result.stdout), worktreeMeta: parseWorktreeMeta(result.stdout) });
     console.log(`[worker] force-pull: task ${task.id} done`);
     return { ok: true, taskId: task.id };
   } catch (err) {
-    queue.update(task.id, { status: 'failed', completed: new Date().toISOString(), error: err.message, output: ((err.stdout ?? '') + (err.stderr ?? '')).slice(-20000) });
+    queue.update(task.id, { status: 'failed', completed: new Date().toISOString(), error: err.message, output: ((err.stdout ?? '') + (err.stderr ?? '')).slice(-20000), worktreeMeta: parseWorktreeMeta((err.stdout ?? '') + (err.stderr ?? '')) });
     console.error(`[worker] force-pull: task ${task.id} failed:`, err.message);
     return { ok: false, reason: err.message, taskId: task.id };
   } finally {

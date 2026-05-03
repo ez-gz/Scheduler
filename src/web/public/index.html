@@ -2,239 +2,506 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="theme-color" content="#000000">
 <title>Scheduler</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --bg: #0f0f0f; --surface: #181818; --surface2: #222; --border: #2c2c2c;
-  --accent: #7c6af7; --accent2: #5a4fcf; --text: #e8e8e8; --muted: #777;
-  --green: #4ade80; --red: #f87171; --yellow: #fbbf24; --blue: #60a5fa;
-  --radius: 10px;
+  --bg: #000;
+  --surface: #0d0d0d;
+  --card: #0f0f0f;
+  --card-hover: #141414;
+  --border: #1c1c1c;
+  --border2: #262626;
+  --text: #ebebeb;
+  --text-2: #787878;
+  --text-3: #3d3d3d;
+  --accent: #30d158;
+  --accent-dim: rgba(48,209,88,0.08);
+  --red: #ff453a;
+  --yellow: #ffd60a;
+  --blue: #0a84ff;
+  --nav-h: 52px;
+  --r: 6px;
+  --font: 'SF Mono','JetBrains Mono','Fira Code',ui-monospace,monospace;
 }
-body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 15px; min-height: 100vh; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: var(--font); font-size: 13px; line-height: 1.5;
+  min-height: 100vh; -webkit-text-size-adjust: 100%; touch-action: manipulation;
+}
 
-/* Header */
-header { position: sticky; top: 0; z-index: 100; background: rgba(15,15,15,0.92); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
-header h1 { font-size: 17px; font-weight: 700; letter-spacing: -0.5px; flex: 1; }
-.worker-pill { display: flex; align-items: center; gap: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 5px 10px; font-size: 12px; user-select: none; }
-.worker-action { background: none; border: none; color: var(--muted); font-size: 11px; cursor: pointer; padding: 0 0 0 4px; line-height: 1; border-left: 1px solid var(--border); padding-left: 8px; margin-left: 2px; }
-.worker-action:hover { color: var(--text); }
-.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
-.dot.green { background: var(--green); animation: pulse 2s infinite; }
-.dot.yellow { background: var(--yellow); }
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
-header a { color: var(--muted); font-size: 13px; text-decoration: none; padding: 4px 8px; }
-header a:hover { color: var(--text); }
+/* ── Header ──────────────────────────────────────────────────────────── */
+header {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(0,0,0,0.92);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  padding: max(11px, env(safe-area-inset-top)) 16px 11px;
+  display: flex; align-items: center; gap: 12px;
+}
+header h1 { font-size: 13px; font-weight: 600; letter-spacing: 0.2px; flex: 1; }
+.wpill { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-2); }
+.wdot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); flex-shrink: 0; }
+.wdot.green { background: var(--accent); animation: blink 2s ease-in-out infinite; }
+.wdot.yellow { background: var(--yellow); }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+.wact {
+  background: none; border: none; color: var(--text-3); font-size: 11px;
+  cursor: pointer; padding-left: 8px; margin-left: 2px; font-family: var(--font);
+  border-left: 1px solid var(--border2); min-height: 26px;
+  -webkit-tap-highlight-color: transparent; transition: color 0.12s;
+}
+.wact:hover, .wact:active { color: var(--text-2); }
 
-/* Stats bar */
-.stats-bar { display: flex; gap: 8px; padding: 14px 16px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-.stat-chip { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; text-align: center; flex-shrink: 0; }
-.stat-chip .num { font-size: 20px; font-weight: 700; line-height: 1; }
-.stat-chip .lbl { font-size: 11px; color: var(--muted); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.3px; }
-.stat-chip.highlight .num { color: var(--accent); }
+/* ── Stats row ──────────────────────────────────────────────────────── */
+.stats-row {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  border-bottom: 1px solid var(--border);
+}
+.stat {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 10px 4px; border-right: 1px solid var(--border);
+}
+.stat:last-child { border-right: none; }
+.stat-n { font-size: 16px; font-weight: 600; line-height: 1; letter-spacing: -0.5px; }
+.stat-n.hi-green { color: var(--accent); }
+.stat-n.hi-red   { color: var(--red); }
+.stat-l { font-size: 9px; color: var(--text-3); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
 
-/* Tabs */
-.tabs { display: flex; gap: 2px; padding: 0 16px 12px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-.tab { padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; color: var(--muted); white-space: nowrap; border: none; background: none; }
-.tab.active { background: var(--surface2); color: var(--text); }
+/* ── Tabs ───────────────────────────────────────────────────────────── */
+.tabs {
+  display: flex; overflow-x: auto; -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; border-bottom: 1px solid var(--border);
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tab {
+  padding: 9px 14px; font-size: 11px; font-weight: 500; letter-spacing: 0.2px;
+  cursor: pointer; color: var(--text-2); white-space: nowrap; border: none;
+  background: none; min-height: 38px; font-family: var(--font);
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+  -webkit-tap-highlight-color: transparent; transition: color 0.12s;
+}
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 .tab:hover:not(.active) { color: var(--text); }
 
-/* Task list */
-.task-list { padding: 0 16px 100px; display: flex; flex-direction: column; gap: 8px; }
-.empty { text-align: center; color: var(--muted); font-size: 14px; padding: 48px 0; }
+/* ── Task list ──────────────────────────────────────────────────────── */
+.task-list {
+  padding: 6px 10px calc(var(--nav-h) + 96px + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; gap: 4px;
+}
+.empty { text-align: center; color: var(--text-3); font-size: 12px; padding: 48px 0; }
 
-/* Task card */
-.task-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: border-color 0.15s; }
-.task-card:hover { border-color: #3c3c3c; }
-.task-card.expanded { border-color: var(--accent); }
-.task-card-header { padding: 12px 14px; cursor: pointer; display: flex; flex-direction: column; gap: 6px; }
-.task-card-top { display: flex; align-items: flex-start; gap: 8px; }
-.task-text { font-size: 14px; font-weight: 500; flex: 1; line-height: 1.45; word-break: break-word; }
-.task-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-.badge { font-size: 10px; font-weight: 700; padding: 3px 7px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.3px; }
-.badge.pending  { background: #232040; color: #a998ff; }
-.badge.running  { background: #1a2e1a; color: var(--green); }
-.badge.done     { background: #162616; color: #6ee7b7; }
-.badge.failed   { background: #2e1a1a; color: var(--red); }
-.badge.cancelled{ background: #222; color: var(--muted); }
-.task-meta { display: flex; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
-.task-meta .tag { display: flex; align-items: center; gap: 3px; }
-.cancel-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; line-height: 1; padding: 0 2px; }
-.cancel-btn:hover { color: var(--red); }
-.expand-arrow { color: var(--muted); font-size: 12px; transition: transform 0.2s; }
-.task-card.expanded .expand-arrow { transform: rotate(180deg); }
-.task-session-actions { display: flex; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
-.resume-btn { padding: 6px 12px; font-size: 12px; font-weight: 500; border-radius: 7px; border: 1px solid var(--accent-dim, #3d3580); background: transparent; color: var(--accent); cursor: pointer; transition: background 0.1s; }
-.resume-btn:hover { background: rgba(124,106,247,0.12); }
+/* ── Task card ──────────────────────────────────────────────────────── */
+.task-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-left: 2px solid var(--border2);
+  border-radius: var(--r); overflow: hidden; transition: border-color 0.12s;
+}
+.task-card.status-running { border-left-color: var(--accent); }
+.task-card.status-done    { border-left-color: #1c3e26; }
+.task-card.status-failed  { border-left-color: var(--red); }
+.task-card.status-pending { border-left-color: var(--border2); }
+.task-card.expanded { border-color: var(--border2); }
+.task-card:hover { border-color: var(--border2); }
+.task-card-header {
+  padding: 10px 12px; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.task-card-header:active { background: var(--card-hover); }
+.task-row { display: flex; align-items: flex-start; gap: 7px; }
+.sdot {
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: 4px;
+}
+.sdot.running   { background: var(--accent); animation: blink 1.5s ease-in-out infinite; }
+.sdot.done      { background: #2a5c38; }
+.sdot.failed    { background: var(--red); }
+.sdot.pending   { background: var(--border2); }
+.sdot.cancelled { background: var(--text-3); }
+.task-title { flex: 1; font-size: 13px; line-height: 1.45; word-break: break-word; }
+.task-acts { display: flex; align-items: center; gap: 2px; flex-shrink: 0; margin-top: -2px; }
+.xbtn {
+  background: none; border: none; color: var(--text-3); cursor: pointer;
+  font-size: 16px; line-height: 1; padding: 4px 6px; margin: -4px -2px;
+  font-family: var(--font); -webkit-tap-highlight-color: transparent;
+  transition: color 0.12s;
+}
+.xbtn:hover, .xbtn:active { color: var(--red); }
+.earrow {
+  color: var(--text-3); font-size: 10px; transition: transform 0.18s;
+  padding: 4px 5px; margin: -4px -3px;
+}
+.task-card.expanded .earrow { transform: rotate(180deg); }
+.task-meta {
+  font-size: 11px; color: var(--text-2); margin-top: 5px; padding-left: 13px;
+}
+.m-accent { color: var(--accent); }
+.m-red    { color: var(--red); }
+.m-muted  { color: var(--text-3); }
+.m-sep    { color: var(--text-3); }
+.sumbtn {
+  background: none; border: none; color: var(--accent); font-size: 12px;
+  cursor: pointer; padding: 4px 5px; margin: -4px -1px;
+  opacity: 0.65; transition: opacity 0.12s; line-height: 1;
+  -webkit-tap-highlight-color: transparent;
+}
+.sumbtn:hover, .sumbtn:active { opacity: 1; }
 
-/* Task output */
-.task-output { border-top: 1px solid var(--border); background: #0a0a0a; display: none; }
+/* ── Session actions ─────────────────────────────────────────────────── */
+.sess-acts {
+  display: flex; gap: 6px; padding: 8px 12px 10px;
+  border-top: 1px solid var(--border);
+}
+.rbtn {
+  padding: 5px 11px; font-size: 11px; font-weight: 500; border-radius: 4px;
+  border: 1px solid var(--border2); background: transparent; color: var(--text-2);
+  cursor: pointer; font-family: var(--font); min-height: 32px;
+  -webkit-tap-highlight-color: transparent; transition: color 0.12s, border-color 0.12s;
+}
+.rbtn:hover, .rbtn:active { color: var(--accent); border-color: rgba(48,209,88,0.4); }
+
+/* ── Task output ─────────────────────────────────────────────────────── */
+.task-output { border-top: 1px solid var(--border); background: var(--bg); display: none; }
 .task-card.expanded .task-output { display: block; }
-.task-output pre { padding: 14px; font-size: 12px; font-family: 'SF Mono', 'Fira Code', monospace; line-height: 1.6; color: #bbb; overflow-x: auto; white-space: pre-wrap; word-break: break-word; max-height: 400px; overflow-y: auto; }
-.output-loading { padding: 16px; color: var(--muted); font-size: 13px; }
-.output-meta { padding: 8px 14px; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); display: flex; gap: 12px; }
+.out-hdr {
+  padding: 6px 12px; font-size: 10px; color: var(--text-3);
+  text-transform: uppercase; letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border);
+}
+.task-output pre {
+  padding: 12px; font-size: 11px; font-family: var(--font);
+  line-height: 1.55; color: #5a5a5a; overflow-x: auto; white-space: pre-wrap;
+  word-break: break-word; max-height: 440px; overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.out-loading { padding: 12px; color: var(--text-3); font-size: 11px; }
+.out-meta {
+  padding: 6px 12px; border-top: 1px solid var(--border);
+  font-size: 10px; color: var(--text-3); display: flex; gap: 10px; flex-wrap: wrap;
+}
 
-/* FAB */
-.fab { position: fixed; bottom: 24px; right: 20px; z-index: 200; width: 52px; height: 52px; border-radius: 50%; background: var(--accent); border: none; color: white; font-size: 26px; cursor: pointer; box-shadow: 0 4px 20px rgba(124,106,247,0.5); display: flex; align-items: center; justify-content: center; transition: transform 0.15s, box-shadow 0.15s; }
-.fab:hover { transform: scale(1.08); box-shadow: 0 6px 24px rgba(124,106,247,0.6); }
-.fab:active { transform: scale(0.95); }
+/* ── JSONL renderer ──────────────────────────────────────────────────── */
+.jl-wrap {
+  padding: 10px 12px; max-height: 460px; overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.jl-msg {
+  font-size: 12px; line-height: 1.65; color: var(--text);
+  padding: 7px 0; border-bottom: 1px solid var(--border);
+  white-space: pre-wrap; word-break: break-word;
+}
+.jl-msg:last-child { border-bottom: none; }
+.jl-msg code {
+  font-family: var(--font); font-size: 11px; background: #111;
+  border: 1px solid var(--border2); border-radius: 3px;
+  padding: 1px 5px; color: var(--accent);
+}
+.jl-msg strong { color: var(--text); font-weight: 600; }
+.jl-tool {
+  font-size: 11px; border: 1px solid var(--border); border-radius: 4px;
+  overflow: hidden; margin: 3px 0;
+}
+.jl-tool summary {
+  list-style: none; padding: 5px 9px; cursor: pointer;
+  display: flex; align-items: center; gap: 6px; background: var(--surface);
+  min-height: 30px; -webkit-tap-highlight-color: transparent;
+}
+.jl-tool summary::-webkit-details-marker { display: none; }
+.jl-tool-name { color: var(--text-2); flex: 1; font-size: 11px; }
+.jl-tool-arrow { color: var(--text-3); font-size: 9px; transition: transform 0.18s; }
+.jl-tool[open] .jl-tool-arrow { transform: rotate(180deg); }
+.jl-tool-body {
+  border-top: 1px solid var(--border); padding: 7px 9px;
+  font-size: 10.5px; color: #4a4a4a; font-family: var(--font);
+  white-space: pre-wrap; word-break: break-word;
+  max-height: 180px; overflow-y: auto; overscroll-behavior: contain;
+}
+.jl-usage {
+  font-size: 10px; color: var(--text-3); padding: 6px 0 2px;
+  text-align: right; border-top: 1px solid var(--border); margin-top: 3px;
+}
+.jl-raw { font-size: 10px; color: var(--text-3); opacity: 0.35; padding: 1px 0; }
+.jl-live-hdr {
+  padding: 5px 12px; font-size: 10px; color: var(--text-3);
+  text-transform: uppercase; letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 6px;
+}
 
-/* Modal */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 300; display: none; align-items: flex-end; justify-content: center; }
+/* ── FAB ─────────────────────────────────────────────────────────────── */
+.fab {
+  position: fixed;
+  bottom: calc(var(--nav-h) + 16px + env(safe-area-inset-bottom));
+  right: 18px; z-index: 200;
+  width: 48px; height: 48px; border-radius: 24px;
+  background: var(--accent); border: none;
+  color: #000; font-size: 26px; font-weight: 300; font-family: var(--font);
+  cursor: pointer; box-shadow: 0 4px 20px rgba(48,209,88,0.3);
+  display: flex; align-items: center; justify-content: center;
+  transition: transform 0.12s, box-shadow 0.12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.fab:hover { transform: scale(1.08); box-shadow: 0 6px 28px rgba(48,209,88,0.4); }
+.fab:active { transform: scale(0.91); }
+
+/* ── Modal ───────────────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 300;
+  display: none; align-items: flex-end; justify-content: center;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
 .modal-overlay.open { display: flex; }
-.modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px 16px 0 0; width: 100%; max-width: 640px; padding: 20px 20px 36px; max-height: 90vh; overflow-y: auto; }
-.modal-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 18px; }
-.modal h2 { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
-label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 5px; margin-top: 14px; }
-label:first-of-type { margin-top: 0; }
+.modal {
+  background: var(--surface); border: 1px solid var(--border2);
+  border-top: 1px solid var(--border2);
+  border-radius: 10px 10px 0 0; width: 100%; max-width: 640px;
+  padding: 16px 16px calc(28px + env(safe-area-inset-bottom));
+  max-height: 92vh; overflow-y: auto;
+}
+.modal-handle { width: 28px; height: 3px; background: var(--border2); border-radius: 2px; margin: 0 auto 14px; }
+.modal h2 { font-size: 12px; font-weight: 600; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-2); }
+.form-label { display: block; font-size: 10px; color: var(--text-3); margin-bottom: 3px; margin-top: 10px; text-transform: uppercase; letter-spacing: 0.4px; font-family: var(--font); }
+.form-label:first-of-type { margin-top: 0; }
 textarea, input[type=text], input[type=number], select {
-  width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
-  color: var(--text); font-size: 15px; padding: 11px 12px; outline: none; font-family: inherit; appearance: none;
+  width: 100%; background: var(--bg); border: 1px solid var(--border2); border-radius: 4px;
+  color: var(--text); font-size: 13px; padding: 8px 10px; outline: none;
+  font-family: var(--font); appearance: none; -webkit-appearance: none;
+  transition: border-color 0.12s;
 }
 textarea:focus, input:focus, select:focus { border-color: var(--accent); }
-textarea { resize: vertical; min-height: 100px; }
-.row2 { display: flex; gap: 10px; }
+textarea { resize: vertical; min-height: 80px; }
+.row2 { display: flex; gap: 8px; }
 .row2 > * { flex: 1; }
-.toggle-row { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
-.toggle-row span { flex: 1; font-size: 14px; }
-.toggle { position: relative; width: 42px; height: 24px; flex-shrink: 0; }
+.toggle-row {
+  display: flex; align-items: center; gap: 10px; margin-top: 10px;
+  padding: 8px 10px; background: var(--bg); border: 1px solid var(--border2); border-radius: 4px;
+}
+.toggle-row span { flex: 1; font-size: 12px; color: var(--text-2); }
+.toggle { position: relative; width: 38px; height: 21px; flex-shrink: 0; }
 .toggle input { opacity: 0; width: 0; height: 0; }
-.slider { position: absolute; inset: 0; background: var(--border); border-radius: 12px; cursor: pointer; transition: 0.2s; }
-.slider:before { content: ''; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.2s; }
+.slider { position: absolute; inset: 0; background: var(--border2); border-radius: 11px; cursor: pointer; transition: background 0.18s; }
+.slider:before { content: ''; position: absolute; height: 15px; width: 15px; left: 3px; bottom: 3px; background: #888; border-radius: 50%; transition: transform 0.18s, background 0.18s; }
 input:checked + .slider { background: var(--accent); }
-input:checked + .slider:before { transform: translateX(18px); }
-.hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
-.btn-primary { width: 100%; margin-top: 18px; padding: 14px; border: none; border-radius: 10px; background: var(--accent); color: white; font-size: 16px; font-weight: 600; cursor: pointer; }
-.btn-primary:disabled { opacity: 0.4; }
+input:checked + .slider:before { transform: translateX(17px); background: #000; }
+.hint { font-size: 11px; color: var(--text-3); margin-top: 3px; }
+.resume-banner {
+  background: var(--accent-dim); border: 1px solid rgba(48,209,88,0.18);
+  border-radius: 4px; padding: 7px 9px; margin-bottom: 10px;
+  font-size: 11px; color: var(--accent);
+}
+.btn-primary {
+  width: 100%; margin-top: 14px; padding: 11px; border: none; border-radius: 5px;
+  background: var(--accent); color: #000; font-size: 12px; font-weight: 700;
+  letter-spacing: 0.3px; text-transform: uppercase;
+  cursor: pointer; min-height: 42px; font-family: var(--font);
+  -webkit-tap-highlight-color: transparent; transition: opacity 0.12s;
+}
+.btn-primary:disabled { opacity: 0.35; }
+.btn-primary:active:not(:disabled) { opacity: 0.78; }
 
-/* Toast */
-#toast { position: fixed; bottom: 84px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 500; opacity: 0; transition: opacity 0.2s; pointer-events: none; white-space: nowrap; z-index: 400; }
+/* ── Toast ───────────────────────────────────────────────────────────── */
+#toast {
+  position: fixed;
+  bottom: calc(var(--nav-h) + 76px + env(safe-area-inset-bottom));
+  left: 50%; transform: translateX(-50%);
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border2);
+  padding: 7px 14px; border-radius: 14px;
+  font-size: 11px; font-family: var(--font);
+  opacity: 0; transition: opacity 0.16s; pointer-events: none;
+  white-space: nowrap; z-index: 400;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+}
 #toast.show { opacity: 1; }
 
-/* Summary pop-out card */
-.summary-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 500; display: none; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(6px); }
-.summary-overlay.open { display: flex; }
-.summary-card { background: var(--surface); border: 1px solid var(--accent); border-radius: 14px; width: 100%; max-width: 700px; max-height: 88vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 0 80px rgba(124,106,247,0.2), 0 24px 80px rgba(0,0,0,0.7); }
-.summary-header { padding: 16px 18px 14px; border-bottom: 1px solid var(--border); background: linear-gradient(135deg, #1a1535 0%, #141420 100%); flex-shrink: 0; }
-.summary-prompt { font-size: 13px; color: var(--muted); line-height: 1.4; margin-bottom: 10px; font-style: italic; }
-.summary-meta-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.summary-timing { font-size: 11px; color: var(--muted); flex: 1; }
-.summary-copy-btn { padding: 4px 10px; font-size: 11px; font-weight: 500; border-radius: 5px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; transition: color 0.15s, border-color 0.15s; }
-.summary-copy-btn:hover { color: var(--text); border-color: #555; }
-.summary-close { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; padding: 0; line-height: 1; margin-left: 4px; }
-.summary-close:hover { color: var(--text); }
-.summary-body { flex: 1; overflow-y: auto; padding: 22px 22px 26px; }
-.summary-message { font-size: 14px; line-height: 1.75; color: #d4d4d4; white-space: pre-wrap; word-break: break-word; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
-.summary-message strong { color: var(--text); font-weight: 600; }
-.summary-message .sum-h1 { display: block; font-size: 16px; color: var(--accent); margin: 14px 0 6px; }
-.summary-message .sum-h2 { display: block; font-size: 15px; color: var(--accent); margin: 12px 0 5px; }
-.summary-message .sum-h3 { display: block; font-size: 14px; color: #9d8fff; margin: 10px 0 4px; }
-.summary-message code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; background: #1c1c1c; border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; color: #a78bfa; }
-.summary-message pre { background: #0d0d0d; border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; overflow-x: auto; margin: 12px 0; white-space: pre; }
-.summary-message pre code { background: none; border: none; padding: 0; color: #bbb; font-size: 12px; }
-.summary-empty { color: var(--muted); font-size: 13px; text-align: center; padding: 32px 0; }
+/* ── Summary overlay ─────────────────────────────────────────────────── */
+.sum-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.88); z-index: 500;
+  display: none; align-items: center; justify-content: center;
+  padding: 16px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.sum-overlay.open { display: flex; }
+.sum-card {
+  background: var(--surface); border: 1px solid var(--border2); border-radius: 8px;
+  width: 100%; max-width: 680px; max-height: 90vh; overflow: hidden;
+  display: flex; flex-direction: column;
+  box-shadow: 0 0 80px rgba(0,0,0,0.9), 0 0 0 1px rgba(48,209,88,0.06);
+}
+.sum-hdr {
+  padding: 12px 14px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.sum-prompt { font-size: 11px; color: var(--text-2); line-height: 1.4; margin-bottom: 8px; }
+.sum-meta-row { display: flex; align-items: center; gap: 7px; }
+.sum-runner { font-size: 10px; color: var(--text-3); padding: 2px 5px; border: 1px solid var(--border2); border-radius: 3px; }
+.sum-timing { font-size: 10px; color: var(--text-3); flex: 1; }
+.sum-copy {
+  padding: 4px 9px; font-size: 10px; border-radius: 3px; border: 1px solid var(--border2);
+  background: transparent; color: var(--text-3); cursor: pointer; font-family: var(--font);
+  min-height: 26px; transition: color 0.12s;
+}
+.sum-copy:hover { color: var(--text-2); }
+.sum-close {
+  background: none; border: none; color: var(--text-3); font-size: 16px;
+  cursor: pointer; padding: 3px 6px; line-height: 1;
+  min-width: 28px; min-height: 28px; display: flex; align-items: center; justify-content: center;
+  -webkit-tap-highlight-color: transparent; transition: color 0.12s;
+}
+.sum-close:hover, .sum-close:active { color: var(--text); }
+.sum-body { flex: 1; overflow-y: auto; padding: 16px; overscroll-behavior: contain; }
+.sum-msg { font-size: 12px; line-height: 1.72; color: #aaa; white-space: pre-wrap; word-break: break-word; font-family: var(--font); }
+.sum-msg strong { color: var(--text); font-weight: 600; }
+.sum-msg .sh1 { display: block; font-size: 13px; color: var(--accent); margin: 14px 0 5px; font-weight: 600; }
+.sum-msg .sh2 { display: block; font-size: 12px; color: var(--accent); margin: 11px 0 4px; font-weight: 600; }
+.sum-msg .sh3 { display: block; font-size: 12px; color: #4a9e62; margin: 9px 0 4px; font-weight: 600; }
+.sum-msg code { font-family: var(--font); font-size: 11px; background: #111; border: 1px solid var(--border2); border-radius: 3px; padding: 1px 5px; color: var(--accent); }
+.sum-msg pre { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 10px 12px; overflow-x: auto; margin: 9px 0; white-space: pre; }
+.sum-msg pre code { background: none; border: none; padding: 0; color: #606060; }
+.sum-empty { color: var(--text-3); font-size: 11px; text-align: center; padding: 28px 0; }
 
-/* Summary button on task card */
-.summary-btn { background: none; border: none; color: var(--accent); font-size: 13px; cursor: pointer; padding: 1px 5px; opacity: 0.75; transition: opacity 0.15s; line-height: 1; }
-.summary-btn:hover { opacity: 1; }
+/* ── Bottom nav ──────────────────────────────────────────────────────── */
+.bnav {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+  background: rgba(0,0,0,0.96);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border);
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  height: calc(var(--nav-h) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.nitem {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; color: var(--text-3); text-decoration: none;
+  font-size: 8px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase;
+  padding: 8px 0; font-family: var(--font);
+  -webkit-tap-highlight-color: transparent; transition: color 0.12s;
+}
+.nitem.active { color: var(--accent); }
+.nitem:active { opacity: 0.6; }
+.nicon { display: flex; align-items: center; justify-content: center; }
+.nicon svg { width: 18px; height: 18px; }
 </style>
 </head>
 <body>
 
 <header>
   <h1>Scheduler</h1>
-  <div class="worker-pill" id="worker-pill">
-    <div class="dot" id="worker-dot"></div>
-    <span id="worker-label">…</span>
-    <button class="worker-action" id="worker-action" onclick="toggleWorker()" style="display:none"></button>
+  <div class="wpill" id="wpill">
+    <div class="wdot" id="wdot"></div>
+    <span id="wlbl">…</span>
+    <button class="wact" id="wact" onclick="toggleWorker()" style="display:none"></button>
   </div>
-  <a href="/admin.html">Admin</a>
-  <a href="/settings.html">Settings</a>
 </header>
 
-<div class="stats-bar" id="stats-bar">
-  <div class="stat-chip highlight"><div class="num" id="s-pending">-</div><div class="lbl">Pending</div></div>
-  <div class="stat-chip"><div class="num" id="s-running">-</div><div class="lbl">Running</div></div>
-  <div class="stat-chip"><div class="num" id="s-done">-</div><div class="lbl">Done</div></div>
-  <div class="stat-chip"><div class="num" id="s-today">-</div><div class="lbl">Today</div></div>
-  <div class="stat-chip"><div class="num" id="s-failed">-</div><div class="lbl">Failed</div></div>
+<div class="stats-row">
+  <div class="stat"><span class="stat-n" id="s-pending">-</span><span class="stat-l">pending</span></div>
+  <div class="stat"><span class="stat-n" id="s-running">-</span><span class="stat-l">running</span></div>
+  <div class="stat"><span class="stat-n" id="s-done">-</span><span class="stat-l">done</span></div>
+  <div class="stat"><span class="stat-n" id="s-today">-</span><span class="stat-l">today</span></div>
+  <div class="stat"><span class="stat-n" id="s-failed">-</span><span class="stat-l">failed</span></div>
 </div>
 
 <div class="tabs" id="tabs">
-  <button class="tab active" data-filter="all">All</button>
-  <button class="tab" data-filter="pending">Pending</button>
-  <button class="tab" data-filter="running">Running</button>
-  <button class="tab" data-filter="done">Done</button>
-  <button class="tab" data-filter="failed">Failed</button>
+  <button class="tab active" data-filter="all">all</button>
+  <button class="tab" data-filter="pending">pending</button>
+  <button class="tab" data-filter="running">running</button>
+  <button class="tab" data-filter="done">done</button>
+  <button class="tab" data-filter="failed">failed</button>
 </div>
 
 <div class="task-list" id="task-list"></div>
 
-<!-- FAB -->
 <button class="fab" onclick="openModal()" title="New task">+</button>
 
 <!-- New task modal -->
 <div class="modal-overlay" id="modal-overlay" onclick="handleOverlayClick(event)">
   <div class="modal" id="modal">
     <div class="modal-handle"></div>
-    <h2 id="modal-title">New Task</h2>
+    <h2 id="modal-title">new task</h2>
 
-    <div id="resume-banner" style="display:none;background:#1a1430;border:1px solid var(--accent-dim,#3d3580);border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:var(--accent)"></div>
+    <div id="resume-banner" class="resume-banner" style="display:none"></div>
 
-    <label>What should the agent do?</label>
-    <textarea id="f-task" placeholder="Refactor the auth module to use the new token format…" rows="4"></textarea>
+    <div class="form-label">task</div>
+    <textarea id="f-task" placeholder="describe what the agent should do…" rows="4"></textarea>
 
-    <label>Directory</label>
-    <input list="dir-list" id="f-dir" type="text" placeholder="Type or pick a project directory…" autocomplete="off">
+    <div class="form-label">directory</div>
+    <input list="dir-list" id="f-dir" type="text" placeholder="~/projects/…" autocomplete="off">
     <datalist id="dir-list"></datalist>
-    <div class="hint">Project root for the agent to work in.</div>
 
-    <div class="row2" style="margin-top:14px">
+    <div class="row2" style="margin-top:10px">
       <div>
-        <label>Runner</label>
-        <select id="f-runner">
-          <option value="claude-sonnet">claude-sonnet</option>
-          <option value="claude-haiku">claude-haiku</option>
-          <option value="claude-opus">claude-opus</option>
-          <option value="codex-gpt-5.4">codex-gpt-5.4</option>
-          <option value="codex-gpt-5.4-mini">codex-gpt-5.4-mini</option>
-        </select>
+        <div class="form-label">runner</div>
+        <select id="f-runner"></select>
       </div>
       <div>
-        <label>Priority</label>
+        <div class="form-label">priority</div>
         <input type="number" id="f-priority" value="0" min="0" max="100">
       </div>
     </div>
 
     <div class="toggle-row" id="worktree-row">
-      <span>Run in worktree + open PR</span>
+      <span>worktree + open PR</span>
       <label class="toggle">
         <input type="checkbox" id="f-worktree">
         <span class="slider"></span>
       </label>
     </div>
-    <div class="hint" id="worktree-hint">Creates an isolated branch, commits work, pushes, opens a GitHub PR.</div>
+    <div class="hint" id="worktree-hint">isolated branch · commits · push · PR</div>
 
-    <button class="btn-primary" id="submit-btn" onclick="submitTask()">Add to Queue</button>
+    <div class="toggle-row" id="durable-row" style="display:none">
+      <span>keep worktree</span>
+      <label class="toggle">
+        <input type="checkbox" id="f-durable-worktree">
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="hint" id="durable-hint" style="display:none">leave the worktree on disk for inspection, cleanup, or continuation</div>
+
+    <button class="btn-primary" id="submit-btn" onclick="submitTask()">add to queue</button>
   </div>
 </div>
 
-<!-- Summary pop-out card -->
-<div class="summary-overlay" id="summary-overlay" onclick="closeSummaryOverlay(event)">
-  <div class="summary-card">
-    <div class="summary-header">
-      <div class="summary-prompt" id="summary-prompt"></div>
-      <div class="summary-meta-row">
-        <span class="badge" id="summary-badge"></span>
-        <span class="summary-timing" id="summary-timing"></span>
-        <button class="summary-copy-btn" id="summary-copy-btn" onclick="copySummary()">copy</button>
-        <button class="summary-close" onclick="closeSummary()" title="Close">✕</button>
+<!-- Summary overlay -->
+<div class="sum-overlay" id="sum-overlay" onclick="closeSumOverlay(event)">
+  <div class="sum-card">
+    <div class="sum-hdr">
+      <div class="sum-prompt" id="sum-prompt"></div>
+      <div class="sum-meta-row">
+        <span class="sum-runner" id="sum-runner"></span>
+        <span class="sum-timing" id="sum-timing"></span>
+        <button class="sum-copy" id="sum-copy" onclick="copySum()">copy</button>
+        <button class="sum-close" onclick="closeSum()">✕</button>
       </div>
     </div>
-    <div class="summary-body" id="summary-body"></div>
+    <div class="sum-body" id="sum-body"></div>
   </div>
 </div>
+
+<!-- Bottom nav -->
+<nav class="bnav">
+  <a href="/" class="nitem active">
+    <span class="nicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="3" y1="7" x2="21" y2="7"/><line x1="3" y1="12" x2="17" y2="12"/><line x1="3" y1="17" x2="21" y2="17"/></svg></span>
+    <span>Queue</span>
+  </a>
+  <a href="/projects.html" class="nitem">
+    <span class="nicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 5h6l2 2h8v12H4z"/><path d="M4 10h16"/></svg></span>
+    <span>Projects</span>
+  </a>
+  <a href="/terminals.html" class="nitem">
+    <span class="nicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7 5 5-5 5"/><path d="M12 19h7"/></svg></span>
+    <span>Shell</span>
+  </a>
+  <a href="/admin.html" class="nitem">
+    <span class="nicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="3" y="13" width="4" height="8" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/></svg></span>
+    <span>Admin</span>
+  </a>
+  <a href="/settings.html" class="nitem">
+    <span class="nicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg></span>
+    <span>Settings</span>
+  </a>
+</nav>
 
 <div id="toast"></div>
 
@@ -243,45 +510,142 @@ let activeFilter = 'all';
 let allTasks = [];
 let expandedIds = new Set();
 let outputCache = {};
-let activeSources = {}; // id -> EventSource for running tasks
+let activeSources = {};
 let dirs = [];
 let workerPaused = false;
+let prevTasksKey = '';
+let tailLines = {};
+let appConfig = {};
 
-// ── Data loading ───────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function timeAgo(iso) {
+  if (!iso) return '';
+  const s = Math.floor((Date.now() - new Date(iso)) / 1000);
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s/60)}m`;
+  if (s < 86400) return `${Math.floor(s/3600)}h`;
+  return `${Math.floor(s/86400)}d`;
+}
+function shortRunner(r) {
+  if (!r) return '—';
+  return r
+    .replace(/^claude-/, '')
+    .replace(/^codex-gpt-5\.4-mini$/, 'codex-mini')
+    .replace(/^codex-gpt-5\.4$/, 'codex');
+}
+function renderInlineMarkdown(raw) {
+  return esc(raw)
+    .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+}
 
+function renderJsonlLine(line) {
+  if (!line.trim() || !line.startsWith('{')) return '';
+  let ev;
+  try { ev = JSON.parse(line); } catch { return `<div class="jl-raw">${esc(line)}</div>`; }
+
+  if (ev.type === 'assistant' && ev.message?.content) {
+    return ev.message.content.map(block => {
+      if (block.type === 'text') {
+        if (!block.text?.trim()) return '';
+        return `<div class="jl-msg">${renderInlineMarkdown(block.text)}</div>`;
+      }
+      if (block.type === 'tool_use') {
+        const args = JSON.stringify(block.input, null, 2);
+        return `<details class="jl-tool"><summary><span class="jl-tool-name">${esc(block.name)}</span><span class="jl-tool-arrow">▾</span></summary><div class="jl-tool-body">${esc(args)}</div></details>`;
+      }
+      return '';
+    }).join('');
+  }
+
+  if (ev.type === 'result' && ev.usage) {
+    const tok = ev.usage;
+    return `<div class="jl-usage">${(tok.input_tokens||0).toLocaleString()} in · ${(tok.output_tokens||0).toLocaleString()} out</div>`;
+  }
+
+  // Codex item events
+  if (ev.type === 'item.started') return '';
+  if (ev.type === 'item.completed' && ev.item) {
+    const item = ev.item;
+    if (item.type === 'agent_message' && item.text?.trim()) {
+      return `<div class="jl-msg">${renderInlineMarkdown(item.text)}</div>`;
+    }
+    if (item.type === 'command_execution') {
+      const cmd = esc(item.command || '?');
+      const out = (item.aggregated_output || '').trim();
+      return `<details class="jl-tool"><summary><span class="jl-tool-name">${cmd}</span><span class="jl-tool-arrow">▾</span></summary><div class="jl-tool-body">${out ? esc(out) : '(no output)'}</div></details>`;
+    }
+    if (item.type === 'file_change') {
+      const changes = Array.isArray(item.changes) ? item.changes : [];
+      const summary = changes.map(c => esc(`${(c.kind ?? '~').padEnd(6)} ${c.path ?? ''}`)).join('\n') || '(no changes)';
+      return `<details class="jl-tool"><summary><span class="jl-tool-name">file changes · ${changes.length}</span><span class="jl-tool-arrow">▾</span></summary><div class="jl-tool-body">${summary}</div></details>`;
+    }
+    return '';
+  }
+
+  if (ev.type === 'turn.completed' && ev.usage) {
+    const tok = ev.usage;
+    return `<div class="jl-usage">${(tok.input_tokens||0).toLocaleString()} in · ${(tok.output_tokens||0).toLocaleString()} out</div>`;
+  }
+
+  return '';
+}
+
+function renderJsonl(rawOutput, runner) {
+  if (!rawOutput) return '<div class="out-loading">no output</div>';
+  const parts = rawOutput.split('\n').map(renderJsonlLine).filter(Boolean);
+  if (!parts.length) {
+    return `<pre style="font-size:11px;font-family:var(--font);line-height:1.55;color:#5a5a5a;white-space:pre-wrap;word-break:break-word;max-height:440px;overflow-y:auto;overscroll-behavior:contain">${esc(rawOutput.slice(-8000))}</pre>`;
+  }
+  return parts.join('');
+}
+
+let _toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
+}
+
+// ── Data ───────────────────────────────────────────────────────────────
 async function loadAll() {
   const [qRes, sRes, wRes] = await Promise.all([
-    fetch('/api/queue'),
-    fetch('/api/queue/stats'),
-    fetch('/api/status'),
+    fetch('/api/queue'), fetch('/api/queue/stats'), fetch('/api/status'),
   ]);
   allTasks = await qRes.json();
   const stats = await sRes.json();
   const ws = await wRes.json();
 
-  // Stats
+  const rn = document.getElementById('s-running');
+  const fl = document.getElementById('s-failed');
   document.getElementById('s-pending').textContent = stats.pending;
-  document.getElementById('s-running').textContent = stats.running;
+  rn.textContent = stats.running;
+  rn.className = 'stat-n' + (stats.running > 0 ? ' hi-green' : '');
   document.getElementById('s-done').textContent = stats.done;
   document.getElementById('s-today').textContent = stats.doneToday;
-  document.getElementById('s-failed').textContent = stats.failed;
+  fl.textContent = stats.failed;
+  fl.className = 'stat-n' + (stats.failed > 0 ? ' hi-red' : '');
 
-  // Worker pill
   workerPaused = ws.paused;
-  const dot = document.getElementById('worker-dot');
-  const lbl = document.getElementById('worker-label');
-  const actionBtn = document.getElementById('worker-action');
+  const dot = document.getElementById('wdot');
+  const lbl = document.getElementById('wlbl');
+  const act = document.getElementById('wact');
   if (ws.paused) {
-    dot.className = 'dot yellow'; lbl.textContent = 'paused';
-    actionBtn.textContent = '▶ resume'; actionBtn.style.display = '';
+    dot.className = 'wdot yellow'; lbl.textContent = 'paused';
+    act.textContent = 'resume'; act.style.display = '';
   } else if (ws.running) {
-    dot.className = 'dot green'; lbl.textContent = 'running';
-    actionBtn.style.display = 'none';
+    dot.className = 'wdot green'; lbl.textContent = 'running';
+    act.style.display = 'none';
   } else {
-    dot.className = 'dot green'; lbl.textContent = 'idle';
-    actionBtn.textContent = '⏸ pause'; actionBtn.style.display = '';
+    dot.className = 'wdot green'; lbl.textContent = 'idle';
+    act.textContent = 'pause'; act.style.display = '';
   }
 
+  updateTabCounts();
   renderTasks();
 }
 
@@ -292,18 +656,41 @@ async function loadDirs() {
   dl.innerHTML = dirs.map(d => `<option value="${d}">`).join('');
 }
 
-// ── Render ─────────────────────────────────────────────────────────────────
+async function loadConfig() {
+  const res = await fetch('/api/config');
+  appConfig = await res.json();
+}
+
+// ── Render ─────────────────────────────────────────────────────────────
+function updateTabCounts() {
+  const counts = { all: allTasks.length, pending: 0, running: 0, done: 0, failed: 0 };
+  allTasks.forEach(t => { if (t.status in counts) counts[t.status]++; });
+  const labels = { all: 'all', pending: 'pending', running: 'running', done: 'done', failed: 'failed' };
+  document.querySelectorAll('.tab').forEach(tab => {
+    const f = tab.dataset.filter;
+    const n = counts[f] ?? 0;
+    tab.textContent = n > 0 ? `${labels[f]} ${n}` : labels[f];
+  });
+}
 
 function renderTasks() {
   const list = document.getElementById('task-list');
-  let tasks = activeFilter === 'all' ? allTasks : allTasks.filter(t => t.status === activeFilter);
+  const tasks = activeFilter === 'all' ? allTasks : allTasks.filter(t => t.status === activeFilter);
+
+  const key = activeFilter + '|' + tasks.map(t =>
+    `${t.id}:${t.status}:${t.finalMessage?1:0}:${t.error?1:0}:${t.priority}`
+  ).join(',');
+  if (key === prevTasksKey) return;
+  prevTasksKey = key;
+
+  const scrollY = window.scrollY;
 
   if (!tasks.length) {
-    list.innerHTML = `<div class="empty">No ${activeFilter === 'all' ? '' : activeFilter + ' '}tasks.</div>`;
+    list.innerHTML = `<div class="empty">no ${activeFilter === 'all' ? '' : activeFilter + ' '}tasks</div>`;
+    requestAnimationFrame(() => window.scrollTo(0, scrollY));
     return;
   }
 
-  // Compute execution order for pending tasks (priority desc, created asc)
   const pendingOrdered = [...allTasks]
     .filter(t => t.status === 'pending')
     .sort((a, b) => b.priority - a.priority || new Date(a.created) - new Date(b.created));
@@ -311,7 +698,6 @@ function renderTasks() {
 
   list.innerHTML = tasks.map(t => taskCard(t, t.status === 'pending' ? posMap.get(t.id) : null)).join('');
 
-  // Re-expand previously expanded cards
   expandedIds.forEach(id => {
     const card = document.getElementById(`card-${id}`);
     if (card) {
@@ -320,83 +706,97 @@ function renderTasks() {
       if (outEl && outputCache[id]) outEl.innerHTML = renderOutput(outputCache[id]);
     }
   });
+
+  requestAnimationFrame(() => window.scrollTo(0, scrollY));
 }
 
-function taskCard(t, queuePos) {
-  const isExpandable = t.status === 'done' || t.status === 'failed' || t.status === 'running' || t.output || t.error;
+function metaLine(t, queuePos) {
   const dirShort = t.dir.split('/').slice(-2).join('/');
   const ago = timeAgo(t.created);
-  const duration = t.started && t.completed
+  const dur = t.started && t.completed
     ? `${Math.round((new Date(t.completed) - new Date(t.started)) / 1000)}s`
     : null;
 
-  // Queue position badge for pending tasks
-  const posTag = queuePos != null
-    ? `<span class="tag" style="color:var(--accent);font-weight:700">#${queuePos}</span>`
-    : '';
+  const parts = [];
+  if (queuePos != null) parts.push(`<span class="m-accent">#${queuePos}</span>`);
+  parts.push(`~/${esc(dirShort)}`);
+  parts.push(esc(shortRunner(t.runner)));
+  if (t.worktree) parts.push('WT');
+  if (t.durableWorktree || t.worktreeMeta?.kept) parts.push('durable');
+  if (t.priority > 0) parts.push(`p${t.priority}`);
 
+  const sc = t.status === 'running' ? 'm-accent' : t.status === 'failed' ? 'm-red' : t.status === 'pending' ? 'm-muted' : '';
+  parts.push(sc ? `<span class="${sc}">${t.status}</span>` : t.status);
+
+  if (ago) parts.push(ago);
+  if (dur) parts.push(dur);
+  if (t.error) parts.push(`<span class="m-red">${esc(t.error.slice(0, 50))}</span>`);
+
+  return parts.join('<span class="m-sep"> · </span>');
+}
+
+function taskCard(t, queuePos) {
+  const isExp = t.status === 'done' || t.status === 'failed' || t.status === 'running' || t.output || t.error;
   const canResume = t.status === 'done' && !t.worktree && t.sessionId;
   const canBranch = canResume && t.runner?.startsWith('claude');
 
   return `
-    <div class="task-card" id="card-${t.id}">
-      <div class="task-card-header" onclick="toggleExpand('${t.id}', ${isExpandable})">
-        <div class="task-card-top">
-          <div class="task-text">${esc(t.task)}</div>
-          <div class="task-actions">
-            <span class="badge ${t.status}">${t.status}</span>
-            ${t.finalMessage ? `<button class="summary-btn" onclick="openSummary(event,'${t.id}')" title="View agent summary">✦</button>` : ''}
-            ${t.status === 'pending' ? `<button class="cancel-btn" onclick="cancelTask(event,'${t.id}')" title="Remove">×</button>` : ''}
-            ${t.status === 'running' ? `<button class="cancel-btn" style="color:var(--yellow);font-size:13px;padding:2px 6px" onclick="forceFailTask(event,'${t.id}')" title="Force fail + reset worker">⚠ fail</button>` : ''}
-            ${isExpandable ? `<span class="expand-arrow">▾</span>` : ''}
+    <div class="task-card status-${t.status}" id="card-${t.id}">
+      <div class="task-card-header" onclick="toggleExpand('${t.id}',${isExp})">
+        <div class="task-row">
+          <span class="sdot ${t.status}"></span>
+          <span class="task-title">${esc(t.task)}</span>
+          <div class="task-acts">
+            ${t.finalMessage ? `<button class="sumbtn" onclick="openSum(event,'${t.id}')" title="summary">✦</button>` : ''}
+            ${t.status === 'pending' ? `<button class="xbtn" onclick="cancelTask(event,'${t.id}')" title="remove">×</button>` : ''}
+            ${t.status === 'running' ? `<button class="xbtn" style="color:var(--yellow)" onclick="forceFailTask(event,'${t.id}')" title="force fail">⚠</button>` : ''}
+            ${isExp ? `<span class="earrow">▾</span>` : ''}
           </div>
         </div>
-        <div class="task-meta">
-          ${posTag}
-          <span class="tag">📁 ${esc(dirShort)}</span>
-          <span class="tag">${t.runner}</span>
-          ${t.worktree ? '<span class="tag">worktree</span>' : ''}
-          ${t.priority > 0 ? `<span class="tag">p${t.priority}</span>` : ''}
-          <span class="tag">${ago}</span>
-          ${duration ? `<span class="tag">${duration}</span>` : ''}
-          ${t.error ? `<span class="tag" style="color:var(--red)">${esc(t.error.slice(0,60))}</span>` : ''}
-        </div>
+        <div class="task-meta">${metaLine(t, queuePos)}</div>
       </div>
-      ${isExpandable ? `<div class="task-output" id="out-${t.id}"><div class="output-loading">Loading output…</div></div>` : ''}
+      ${isExp ? `<div class="task-output" id="out-${t.id}"><div class="out-loading">loading…</div></div>` : ''}
       ${canResume ? `
-      <div class="task-session-actions">
-        <button class="resume-btn" onclick="continueTask(event,'${t.id}')">↩ continue</button>
-        ${canBranch ? `<button class="resume-btn" onclick="branchTask(event,'${t.id}')">⑂ branch</button>` : ''}
+      <div class="sess-acts">
+        <button class="rbtn" onclick="continueTask(event,'${t.id}')">↩ continue</button>
+        ${canBranch ? `<button class="rbtn" onclick="branchTask(event,'${t.id}')">⑂ branch</button>` : ''}
       </div>` : ''}
     </div>`;
 }
 
 function renderOutput(task) {
-  const out = task.output || task.error || '(no output)';
   const meta = [
-    task.started ? `started ${timeAgo(task.started)}` : null,
-    task.completed ? `completed ${timeAgo(task.completed)}` : null,
+    task.started   ? `started ${timeAgo(task.started)} ago` : null,
+    task.completed ? `done ${timeAgo(task.completed)} ago`  : null,
     task.dir,
+    task.worktreeMeta?.path ? `worktree ${task.worktreeMeta.path}` : null,
   ].filter(Boolean);
+  let content;
+  if (task.output) {
+    content = `<div class="jl-wrap">${renderJsonl(task.output, task.runner)}</div>`;
+  } else if (task.error) {
+    content = `<div class="jl-wrap"><pre style="font-size:11px;font-family:var(--font);line-height:1.55;color:var(--red);white-space:pre-wrap;word-break:break-word;max-height:440px;overflow-y:auto">${esc(task.error)}</pre></div>`;
+  } else {
+    content = '<div class="out-loading">no output</div>';
+  }
   return `
-    <pre>${esc(out)}</pre>
-    <div class="output-meta">${meta.map(m => `<span>${esc(m)}</span>`).join('')}</div>`;
+    <div class="out-hdr">output</div>
+    ${content}
+    <div class="out-meta">${meta.map(m => `<span>${esc(m)}</span>`).join(' · ')}</div>`;
 }
 
-// ── Interactions ───────────────────────────────────────────────────────────
-
+// ── Interactions ───────────────────────────────────────────────────────
 async function toggleExpand(id, expandable) {
   if (!expandable) return;
   const card = document.getElementById(`card-${id}`);
   const outEl = document.getElementById(`out-${id}`);
   if (!card || !outEl) return;
 
-  const isOpen = card.classList.contains('expanded');
-  if (isOpen) {
+  if (card.classList.contains('expanded')) {
     card.classList.remove('expanded');
     expandedIds.delete(id);
-    // Close SSE if open
     if (activeSources[id]) { activeSources[id].close(); delete activeSources[id]; }
+    delete tailLines[id];
     return;
   }
 
@@ -405,17 +805,30 @@ async function toggleExpand(id, expandable) {
 
   const task = allTasks.find(t => t.id === id);
   if (task?.status === 'running') {
-    outEl.innerHTML = `<pre id="tail-${id}" style="max-height:400px;overflow-y:auto;font-size:11px;font-family:'SF Mono',monospace;padding:14px;color:#bbb;white-space:pre-wrap;word-break:break-word"></pre>
-      <div class="output-meta"><span>live tail · raw session JSONL</span></div>`;
-    const pre = document.getElementById(`tail-${id}`);
+    tailLines[id] = [];
+    outEl.innerHTML = `
+      <div class="jl-live-hdr"><span class="wdot green"></span>live</div>
+      <div class="jl-wrap" id="jl-${id}" style="min-height:48px"></div>`;
     const src = new EventSource(`/api/tasks/${id}/tail`);
     activeSources[id] = src;
+    let rPending = false;
     src.onmessage = e => {
-      pre.textContent += e.data + '\n';
-      pre.scrollTop = pre.scrollHeight;
+      tailLines[id].push(e.data);
+      if (!rPending) {
+        rPending = true;
+        requestAnimationFrame(() => {
+          const el = document.getElementById(`jl-${id}`);
+          if (!el) { rPending = false; return; }
+          const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+          el.innerHTML = renderJsonl(tailLines[id].join('\n'), task.runner);
+          if (atBottom) el.scrollTop = el.scrollHeight;
+          rPending = false;
+        });
+      }
     };
     src.onerror = () => {
-      pre.textContent += '\n[SSE connection lost]\n';
+      const el = document.getElementById(`jl-${id}`);
+      if (el) el.innerHTML += '<div class="jl-raw" style="opacity:1;color:var(--text-3)">[stream ended]</div>';
     };
   } else {
     if (!outputCache[id]) {
@@ -428,106 +841,96 @@ async function toggleExpand(id, expandable) {
 
 async function forceFailTask(e, id) {
   e.stopPropagation();
-  if (!confirm('Force-fail this task and reset the worker? The underlying process will keep running but the queue will unblock.')) return;
+  if (!confirm('Force-fail this task and reset the worker?')) return;
   await Promise.all([
-    fetch(`/api/tasks/${id}/status`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ status: 'failed', error: 'manually force-failed' }) }),
-    fetch('/api/worker/reset', { method: 'POST' }),
+    fetch(`/api/tasks/${id}/status`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'failed',error:'manually force-failed'}) }),
+    fetch('/api/worker/reset', { method:'POST' }),
   ]);
   if (activeSources[id]) { activeSources[id].close(); delete activeSources[id]; }
-  toast('Force-failed + worker reset');
-  loadAll();
+  toast('force-failed');
+  prevTasksKey = ''; loadAll();
 }
 
 async function cancelTask(e, id) {
   e.stopPropagation();
-  await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
-  toast('Task removed');
-  loadAll();
+  await fetch(`/api/tasks/${id}`, { method:'DELETE' });
+  toast('removed');
+  prevTasksKey = ''; loadAll();
 }
 
 async function continueTask(e, id) {
   e.stopPropagation();
-  if (!outputCache[id]) {
-    const res = await fetch(`/api/tasks/${id}`);
-    outputCache[id] = await res.json();
-  }
+  if (!outputCache[id]) { const r = await fetch(`/api/tasks/${id}`); outputCache[id] = await r.json(); }
   const t = outputCache[id];
-  openModal({ sessionId: t.sessionId, runner: t.runner, dir: t.dir, forkSession: false, sourceId: id });
+  openModal({ sessionId:t.sessionId, runner:t.runner, dir:t.dir, forkSession:false, sourceId:id });
 }
 
 async function branchTask(e, id) {
   e.stopPropagation();
-  if (!outputCache[id]) {
-    const res = await fetch(`/api/tasks/${id}`);
-    outputCache[id] = await res.json();
-  }
+  if (!outputCache[id]) { const r = await fetch(`/api/tasks/${id}`); outputCache[id] = await r.json(); }
   const t = outputCache[id];
-  openModal({ sessionId: t.sessionId, runner: t.runner, dir: t.dir, forkSession: true, sourceId: id });
+  openModal({ sessionId:t.sessionId, runner:t.runner, dir:t.dir, forkSession:true, sourceId:id });
 }
 
 async function toggleWorker() {
-  const url = workerPaused ? '/api/worker/resume' : '/api/worker/pause';
-  await fetch(url, { method: 'POST' });
+  await fetch(workerPaused ? '/api/worker/resume' : '/api/worker/pause', {method:'POST'});
   loadAll();
 }
 
-// Tabs
 document.getElementById('tabs').addEventListener('click', e => {
   const tab = e.target.closest('.tab');
   if (!tab) return;
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   tab.classList.add('active');
   activeFilter = tab.dataset.filter;
-  renderTasks();
+  prevTasksKey = ''; renderTasks();
 });
 
-// ── Modal ──────────────────────────────────────────────────────────────────
-
+// ── Modal ──────────────────────────────────────────────────────────────
 const RUNNERS = [
-  { value: 'claude-sonnet',    family: 'claude' },
-  { value: 'claude-haiku',     family: 'claude' },
-  { value: 'claude-opus',      family: 'claude' },
-  { value: 'codex-gpt-5.4',     family: 'codex'  },
-  { value: 'codex-gpt-5.4-mini', family: 'codex'  },
+  { value:'claude-sonnet',      family:'claude' },
+  { value:'claude-haiku',       family:'claude' },
+  { value:'claude-opus',        family:'claude' },
+  { value:'codex-gpt-5.4',      family:'codex'  },
+  { value:'codex-gpt-5.4-mini', family:'codex'  },
 ];
 
 function setRunnerOptions(family = null) {
-  const runnerEl = document.getElementById('f-runner');
+  const el = document.getElementById('f-runner');
   const list = family ? RUNNERS.filter(r => r.family === family) : RUNNERS;
-  runnerEl.innerHTML = list.map(r => `<option value="${r.value}">${r.value}</option>`).join('');
+  el.innerHTML = list.map(r => `<option value="${r.value}">${shortRunner(r.value)}</option>`).join('');
 }
 
-let resumeState = null; // { sessionId, runner, dir, forkSession, sourceId } | null
+let resumeState = null;
 
 function openModal(resume = null) {
   resumeState = resume;
   const banner = document.getElementById('resume-banner');
-  const title = document.getElementById('modal-title');
-  const runnerEl = document.getElementById('f-runner');
-  const dirEl = document.getElementById('f-dir');
-  const worktreeRow = document.getElementById('worktree-row');
-  const worktreeHint = document.getElementById('worktree-hint');
+  const title  = document.getElementById('modal-title');
+  const dirEl  = document.getElementById('f-dir');
+  const wtRow  = document.getElementById('worktree-row');
+  const wtHint = document.getElementById('worktree-hint');
+  const durableRow = document.getElementById('durable-row');
+  const durableHint = document.getElementById('durable-hint');
+  const subBtn = document.getElementById('submit-btn');
 
   if (resume) {
-    const family = resume.runner?.split('-')[0] ?? null;
-    setRunnerOptions(family);
-    title.textContent = resume.forkSession ? 'Branch Session' : 'Continue Session';
+    setRunnerOptions(resume.runner?.split('-')[0] ?? null);
+    title.textContent   = resume.forkSession ? 'branch session' : 'continue session';
     banner.style.display = '';
-    banner.textContent = `${resume.forkSession ? '⑂ Branching from' : '↩ Continuing'} session · ${resume.sourceId}`;
-    runnerEl.value = resume.runner;
-    dirEl.value = resume.dir;
-    dirEl.disabled = true;
-    worktreeRow.style.display = 'none';
-    worktreeHint.style.display = 'none';
-    document.getElementById('submit-btn').textContent = resume.forkSession ? 'Queue Branch' : 'Queue Continuation';
+    banner.textContent  = `${resume.forkSession ? '⑂ branching from' : '↩ continuing'} · ${resume.sourceId}`;
+    document.getElementById('f-runner').value = resume.runner;
+    dirEl.value = resume.dir; dirEl.disabled = true;
+    wtRow.style.display = 'none'; wtHint.style.display = 'none';
+    durableRow.style.display = 'none'; durableHint.style.display = 'none';
+    subBtn.textContent = resume.forkSession ? 'queue branch' : 'queue continuation';
   } else {
     setRunnerOptions();
-    title.textContent = 'New Task';
+    title.textContent   = 'new task';
     banner.style.display = 'none';
-    dirEl.disabled = false;
-    worktreeRow.style.display = '';
-    worktreeHint.style.display = '';
-    document.getElementById('submit-btn').textContent = 'Add to Queue';
+    dirEl.disabled = false; wtRow.style.display = ''; wtHint.style.display = '';
+    updateDurableVisibility();
+    subBtn.textContent = 'add to queue';
   }
 
   document.getElementById('modal-overlay').classList.add('open');
@@ -547,12 +950,12 @@ function handleOverlayClick(e) {
 
 async function submitTask() {
   const task = document.getElementById('f-task').value.trim();
-  const dir = resumeState ? resumeState.dir : document.getElementById('f-dir').value.trim();
-  if (!task) { toast('Task description is required'); return; }
-  if (!dir)  { toast('Directory is required'); return; }
+  const dir  = resumeState ? resumeState.dir : document.getElementById('f-dir').value.trim();
+  if (!task) { toast('task required'); return; }
+  if (!dir)  { toast('directory required'); return; }
 
   const btn = document.getElementById('submit-btn');
-  btn.disabled = true; btn.textContent = 'Adding…';
+  btn.disabled = true; btn.textContent = 'adding…';
 
   try {
     const body = {
@@ -560,126 +963,99 @@ async function submitTask() {
       runner: document.getElementById('f-runner').value,
       priority: parseInt(document.getElementById('f-priority').value) || 0,
       worktree: resumeState ? false : document.getElementById('f-worktree').checked,
-      ...(resumeState ? { resumeSessionId: resumeState.sessionId, forkSession: resumeState.forkSession } : {}),
+      durableWorktree: resumeState ? false : document.getElementById('f-durable-worktree').checked,
+      ...(resumeState ? { resumeSessionId:resumeState.sessionId, forkSession:resumeState.forkSession } : {}),
     };
-    const res = await fetch('/api/tasks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    const res  = await fetch('/api/tasks', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
     document.getElementById('f-task').value = '';
     closeModal();
-    toast(resumeState ? (resumeState.forkSession ? 'Branch queued' : 'Continuation queued') : 'Task added');
-    loadAll();
+    toast(resumeState ? (resumeState.forkSession ? 'branch queued' : 'continuation queued') : 'task added');
+    prevTasksKey = ''; loadAll();
   } catch (err) {
-    toast(`Error: ${err.message}`);
+    toast(`error: ${err.message}`);
   } finally {
     btn.disabled = false;
-    btn.textContent = resumeState?.forkSession ? 'Queue Branch' : resumeState ? 'Queue Continuation' : 'Add to Queue';
+    btn.textContent = resumeState?.forkSession ? 'queue branch' : resumeState ? 'queue continuation' : 'add to queue';
   }
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// ── Summary ────────────────────────────────────────────────────────────
+let sumTask = null;
 
-function timeAgo(iso) {
-  if (!iso) return '';
-  const s = Math.floor((Date.now() - new Date(iso)) / 1000);
-  if (s < 60) return `${s}s ago`;
-  if (s < 3600) return `${Math.floor(s/60)}m ago`;
-  if (s < 86400) return `${Math.floor(s/3600)}h ago`;
-  return `${Math.floor(s/86400)}d ago`;
-}
-function esc(s) {
-  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-let toastTimer;
-function toast(msg) {
-  const el = document.getElementById('toast');
-  el.textContent = msg; el.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
-}
-
-// ── Summary pop-out ────────────────────────────────────────────────────────
-
-let summaryTask = null;
-
-async function openSummary(e, id) {
+async function openSum(e, id) {
   e.stopPropagation();
   let task = allTasks.find(t => t.id === id);
   if (!task?.finalMessage) {
     const res = await fetch(`/api/tasks/${id}`);
-    task = await res.json();
-    outputCache[id] = task;
+    task = await res.json(); outputCache[id] = task;
   }
   if (!task?.finalMessage) return;
-  summaryTask = task;
+  sumTask = task;
 
-  document.getElementById('summary-prompt').textContent = task.task;
-  const badge = document.getElementById('summary-badge');
-  badge.textContent = task.runner;
-  badge.className = 'badge ' + task.status;
+  document.getElementById('sum-prompt').textContent = task.task;
+  document.getElementById('sum-runner').textContent = shortRunner(task.runner);
   const dur = task.started && task.completed
     ? `${Math.round((new Date(task.completed) - new Date(task.started)) / 1000)}s · `
     : '';
-  document.getElementById('summary-timing').textContent = dur + (task.completed ? timeAgo(task.completed) : '');
-  document.getElementById('summary-body').innerHTML = renderSummaryMarkdown(task.finalMessage);
-  document.getElementById('summary-overlay').classList.add('open');
+  document.getElementById('sum-timing').textContent = dur + (task.completed ? `${timeAgo(task.completed)} ago` : '');
+  document.getElementById('sum-body').innerHTML = renderSumMarkdown(task.finalMessage);
+  document.getElementById('sum-overlay').classList.add('open');
 }
 
-function closeSummary() {
-  document.getElementById('summary-overlay').classList.remove('open');
-  summaryTask = null;
+function closeSum() {
+  document.getElementById('sum-overlay').classList.remove('open');
+  sumTask = null;
+}
+function closeSumOverlay(e) {
+  if (e.target === document.getElementById('sum-overlay')) closeSum();
 }
 
-function closeSummaryOverlay(e) {
-  if (e.target === document.getElementById('summary-overlay')) closeSummary();
+async function copySum() {
+  if (!sumTask?.finalMessage) return;
+  await navigator.clipboard.writeText(sumTask.finalMessage);
+  const btn = document.getElementById('sum-copy');
+  btn.textContent = 'copied'; setTimeout(() => { btn.textContent = 'copy'; }, 1500);
 }
 
-async function copySummary() {
-  if (!summaryTask?.finalMessage) return;
-  await navigator.clipboard.writeText(summaryTask.finalMessage);
-  const btn = document.getElementById('summary-copy-btn');
-  btn.textContent = 'copied!';
-  setTimeout(() => { btn.textContent = 'copy'; }, 1600);
-}
-
-function renderSummaryMarkdown(raw) {
-  // Pull out fenced code blocks first so inner content isn't escaped or re-processed
+function renderSumMarkdown(raw) {
   const blocks = [];
-  const withPlaceholders = raw.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
-    const idx = blocks.length;
+  const wp = raw.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, _l, code) => {
+    const i = blocks.length;
     blocks.push(`<pre><code>${esc(code)}</code></pre>`);
-    return `\x00BLK${idx}\x00`;
+    return `\x00B${i}\x00`;
   });
 
-  let html = esc(withPlaceholders)
-    // Inline code
+  let html = esc(wp)
     .replace(/`([^`\n]+)`/g, '<code>$1</code>')
-    // Bold
     .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
-    // Headers (must be start-of-line after esc — esc doesn't touch # or newlines)
-    .replace(/^### ([^\n]+)/gm, '<span class="sum-h3">$1</span>')
-    .replace(/^## ([^\n]+)/gm,  '<span class="sum-h2">$1</span>')
-    .replace(/^# ([^\n]+)/gm,   '<span class="sum-h1">$1</span>');
+    .replace(/^### ([^\n]+)/gm, '<span class="sh3">$1</span>')
+    .replace(/^## ([^\n]+)/gm,  '<span class="sh2">$1</span>')
+    .replace(/^# ([^\n]+)/gm,   '<span class="sh1">$1</span>');
 
-  // Restore code blocks
-  blocks.forEach((b, i) => { html = html.replace(`\x00BLK${i}\x00`, b); });
-
-  return `<div class="summary-message">${html}</div>`;
+  blocks.forEach((b, i) => { html = html.replace(`\x00B${i}\x00`, b); });
+  return `<div class="sum-msg">${html}</div>`;
 }
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && document.getElementById('summary-overlay').classList.contains('open')) {
-    closeSummary();
-  }
+  if (e.key !== 'Escape') return;
+  if (document.getElementById('sum-overlay').classList.contains('open')) closeSum();
+  else if (document.getElementById('modal-overlay').classList.contains('open')) closeModal();
 });
 
-// ── Init ───────────────────────────────────────────────────────────────────
-loadDirs();
-loadAll();
+// ── Init ───────────────────────────────────────────────────────────────
+function updateDurableVisibility() {
+  const enabled = appConfig.features?.durableWorktrees === true;
+  const checked = document.getElementById('f-worktree').checked;
+  document.getElementById('durable-row').style.display = enabled && checked ? '' : 'none';
+  document.getElementById('durable-hint').style.display = enabled && checked ? '' : 'none';
+  if (!enabled || !checked) document.getElementById('f-durable-worktree').checked = false;
+}
+
+document.getElementById('f-worktree').addEventListener('change', updateDurableVisibility);
+
+loadConfig().then(() => { loadDirs(); loadAll(); });
 setInterval(loadAll, 6000);
 </script>
 </body>

@@ -92,7 +92,19 @@ Treat the ngrok URL like access to your development machine. Use a strong Basic 
 
 ## Config
 
-Edit `configs/schedule.json`:
+Scheduler reads local user config from `configs/schedule.json`. That file is
+gitignored because it contains machine-specific schedule windows, usage
+thresholds, feature flags, and directory scan roots.
+
+Fresh clones fall back to the tracked `configs/schedule.example.json`. You can
+either edit Settings in the web UI, which writes `configs/schedule.json`, or copy
+the example manually:
+
+```bash
+cp configs/schedule.example.json configs/schedule.json
+```
+
+Example:
 
 ```jsonc
 {
@@ -146,9 +158,11 @@ src/
       admin.html      — worker control, usage, telemetry
       settings.html   — schedule windows, usage gates, remote access
 configs/
-  schedule.json       — time windows + usage limits
+  schedule.example.json — tracked default schedule + usage config
+  schedule.json         — local user config (gitignored)
 data/
-  queue.jsonl         — task queue (gitignored, auto-created on first run)
+  queue.jsonl           — task queue/history (gitignored, auto-created on first run)
+  terminals.json        — tmux session registry (gitignored, auto-created on first use)
 ```
 
 ## Runner interface
