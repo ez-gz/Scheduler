@@ -7,6 +7,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { randomBytes } from 'crypto';
 import * as queue from '../queue/store.js';
+import * as scheduled from '../queue/scheduledStore.js';
 import { getStatus, pause, resume, poll, forcePull, forceReset } from '../worker/poller.js';
 import { getDirs } from './dirs.js';
 import { getAllUsage } from '../scheduler/usageRunner.js';
@@ -143,6 +144,23 @@ function normalizeTmuxKey(key) {
   return TMUX_KEY_ALIASES[normalized] ?? null;
 }
 
+function normalizeTaskRequest(body) {
+  const { task, dir, worktree, durableWorktree, runner, priority, resumeSessionId, forkSession } = body;
+  if (!task?.trim()) throw new Error('task is required');
+  if (!dir?.trim()) throw new Error('dir is required');
+  const isWorktree = worktree === true || worktree === 'true';
+  return {
+    task: task.trim(),
+    dir: dir.trim(),
+    worktree: isWorktree,
+    durableWorktree: isWorktree && (durableWorktree === true || durableWorktree === 'true'),
+    runner: runner ?? 'claude-sonnet',
+    priority: Number(priority ?? 0),
+    resumeSessionId: resumeSessionId ?? null,
+    forkSession: forkSession === true || forkSession === 'true',
+  };
+}
+
 function safeWorktrees() {
   return queue.list()
     .filter(t => t.worktreeMeta?.path)
@@ -169,21 +187,45 @@ function safeWorktrees() {
 // ── Queue API ─────────────────────────────────────────────────────────────
 
 app.post('/api/tasks', (req, res) => {
-  const { task, dir, worktree, durableWorktree, runner, priority, resumeSessionId, forkSession } = req.body;
-  if (!task?.trim()) return res.status(400).json({ error: 'task is required' });
-  if (!dir?.trim()) return res.status(400).json({ error: 'dir is required' });
-  const isWorktree = worktree === true || worktree === 'true';
-  const created = queue.add({
-    task: task.trim(),
-    dir: dir.trim(),
-    worktree: isWorktree,
-    durableWorktree: isWorktree && (durableWorktree === true || durableWorktree === 'true'),
-    runner: runner ?? 'claude-sonnet',
-    priority: Number(priority ?? 0),
-    resumeSessionId: resumeSessionId ?? null,
-    forkSession: forkSession === true || forkSession === 'true',
-  });
-  res.json({ ok: true, task: created });
+  try {
+    const created = queue.add(normalizeTaskRequest(req.body));
+    res.json({ ok: true, task: created });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/scheduled', (req, res) => {
+  try {
+    const body = normalizeTaskRequest(req.body);
+    const created = scheduled.add({ ...body, scheduledFor: req.body?.scheduledFor });
+    res.json({ ok: true, scheduled: created });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get('/api/scheduled', (req, res) => {
+  const { status } = req.query;
+  res.json(scheduled.list(status ?? null).reverse());
+});
+
+app.post('/api/scheduled/:id/queue', (req, res) => {
+  try {
+    const result = scheduled.promoteNow(req.params.id, queue.add);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/scheduled/:id', (req, res) => {
+  try {
+    const item = scheduled.cancel(req.params.id);
+    res.json({ ok: true, scheduled: item });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 app.get('/api/queue', (req, res) => {
@@ -193,9 +235,11 @@ app.get('/api/queue', (req, res) => {
 
 app.get('/api/queue/stats', (req, res) => {
   const all = queue.list();
+  const scheduledItems = scheduled.list('scheduled');
   const today = new Date().toISOString().slice(0, 10);
   res.json({
     pending: all.filter(t => t.status === 'pending').length,
+    scheduled: scheduledItems.length,
     running: all.filter(t => t.status === 'running').length,
     done: all.filter(t => t.status === 'done').length,
     failed: all.filter(t => t.status === 'failed').length,
@@ -240,7 +284,7 @@ app.get('/api/queue/stats', (req, res) => {
 });
 
 app.get('/api/projects/summary', (req, res) => {
-  const tasks = queue.list();
+  const tasks = [...scheduled.list('scheduled'), ...queue.list()];
   const projects = new Map();
 
   for (const task of tasks) {
@@ -250,6 +294,7 @@ app.get('/api/projects/summary', (req, res) => {
       name: projectName(dir),
       total: 0,
       pending: 0,
+      scheduled: 0,
       running: 0,
       done: 0,
       failed: 0,

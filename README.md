@@ -7,7 +7,7 @@ It is built for one practical workflow: keep the real development environment on
 ## What This Does
 
 - Runs a local web UI at `http://localhost:3747`.
-- Queues agent tasks in `data/queue.jsonl`.
+- Queues agent tasks in `data/queue.jsonl` and keeps future tasks in `data/scheduled.jsonl` until they are due.
 - Runs tasks through shell runners in `src/runners/`.
 - Supports Claude Code runners and Codex runners.
 - Can run tasks directly in a project directory or in a temporary Git worktree.
@@ -235,13 +235,14 @@ Scheduler has two main pieces:
 The worker loop:
 
 1. Reaps stale `running` tasks on startup.
-2. Checks whether the worker is paused.
-3. Checks whether another task is already running.
-4. Checks the configured schedule window.
-5. Selects the next pending task by priority, then oldest creation time.
-6. Checks provider usage limits.
-7. Runs the matching shell runner.
-8. Stores task output, final message, session ID, worktree metadata, and status.
+2. Promotes due scheduled tasks into the normal pending queue.
+3. Checks whether the worker is paused.
+4. Checks whether another task is already running.
+5. Checks the configured schedule window.
+6. Selects the next pending task by priority, then oldest creation time.
+7. Checks provider usage limits.
+8. Runs the matching shell runner.
+9. Stores task output, final message, session ID, worktree metadata, and status.
 
 ## Agent Onboarding Notes
 
@@ -256,6 +257,7 @@ If you are an AI coding agent working in this repository, start here.
 - `src/web/server.js`: HTTP API and static UI serving.
 - `src/worker/poller.js`: queue polling and task lifecycle.
 - `src/queue/store.js`: JSONL queue storage.
+- `src/queue/scheduledStore.js`: JSONL scheduled-task storage and due-task promotion.
 - `src/runners/index.js`: runner dispatch.
 - `src/runners/_claude.sh`: shared Claude runner behavior.
 - `src/runners/_codex.sh`: shared Codex runner behavior.
@@ -268,6 +270,7 @@ These files are local runtime state and are gitignored or intentionally machine-
 
 - `configs/schedule.json`
 - `data/queue.jsonl`
+- `data/scheduled.jsonl`
 - `data/terminals.json`
 - `data/usage-cache.json`
 - `node_modules/`
@@ -303,6 +306,8 @@ Task records may contain:
 - `worktree`
 - `durableWorktree`
 - `output`
+- `scheduledSourceId`
+- `scheduledFor`
 - `error`
 - `sessionId`
 - `resumeSessionId`
@@ -449,6 +454,8 @@ data/
   .gitkeep
   queue.jsonl
     Local queue and history, gitignored.
+  scheduled.jsonl
+    Local scheduled-task registry, gitignored.
   terminals.json
     Local tmux terminal registry, gitignored.
   usage-cache.json
@@ -460,6 +467,10 @@ data/
 The UI uses these API groups:
 
 - `POST /api/tasks`: create a task.
+- `POST /api/scheduled`: create a future task.
+- `GET /api/scheduled`: list scheduled-task records.
+- `POST /api/scheduled/:id/queue`: queue a scheduled task immediately.
+- `DELETE /api/scheduled/:id`: cancel a scheduled task.
 - `GET /api/queue`: list tasks.
 - `GET /api/queue/stats`: queue telemetry.
 - `GET /api/tasks/:id`: fetch one task.

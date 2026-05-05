@@ -1,4 +1,5 @@
 import * as queue from '../queue/store.js';
+import * as scheduled from '../queue/scheduledStore.js';
 import { run } from '../runners/index.js';
 import { isInWindow, loadConfig } from '../scheduler/windowCheck.js';
 import { isUsageSafe } from '../scheduler/usageCheck.js';
@@ -76,6 +77,11 @@ function parseWorktreeMeta(output) {
 export async function poll() {
   pollCount++;
 
+  const promoted = scheduled.promoteDue(queue.add);
+  if (promoted.length > 0) {
+    console.log(`[worker] promoted ${promoted.length} scheduled task(s) into the queue`);
+  }
+
   if (paused) {
     lastPollResult = { ok: false, reason: 'worker paused' };
     return;
@@ -147,6 +153,11 @@ export async function poll() {
 export async function forcePull() {
   if (running) return { ok: false, reason: 'task already running' };
 
+  const promoted = scheduled.promoteDue(queue.add);
+  if (promoted.length > 0) {
+    console.log(`[worker] force-pull: promoted ${promoted.length} scheduled task(s) into the queue`);
+  }
+
   const task = queue.next();
   if (!task) return { ok: false, reason: 'queue empty' };
 
@@ -187,6 +198,8 @@ export function forceReset() {
 
 export async function getStatus() {
   const nextTask = queue.next();
+  const scheduledItems = scheduled.list('scheduled')
+    .sort((a, b) => new Date(a.scheduledFor) - new Date(b.scheduledFor) || b.priority - a.priority || new Date(a.created) - new Date(b.created));
   const usageCheck = nextTask
     ? await isUsageSafe(nextTask)
     : { safe: true, reason: 'queue empty', detail: { provider: null } };
@@ -200,6 +213,10 @@ export async function getStatus() {
     usageCheck,
     nextTask: nextTask
       ? { id: nextTask.id, runner: nextTask.runner, task: nextTask.task.slice(0, 120), dir: nextTask.dir }
+      : null,
+    scheduledCount: scheduledItems.length,
+    nextScheduled: scheduledItems[0]
+      ? { id: scheduledItems[0].id, runner: scheduledItems[0].runner, task: scheduledItems[0].task.slice(0, 120), dir: scheduledItems[0].dir, scheduledFor: scheduledItems[0].scheduledFor }
       : null,
     currentTask: currentTask
       ? { id: currentTask.id, task: currentTask.task.slice(0, 120), dir: currentTask.dir, started: currentTask.started ?? null }

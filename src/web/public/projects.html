@@ -35,6 +35,7 @@ main { max-width:900px; margin:0 auto; padding:12px 10px calc(var(--nav-h) + 42p
 .badge { color:var(--accent); border:1px solid rgba(48,209,88,0.25); border-radius:3px; padding:2px 6px; font-size:10px; flex-shrink:0; }
 .bar { display:flex; height:6px; overflow:hidden; border-radius:3px; background:#090909; margin:8px 0; }
 .seg.pending { background:var(--yellow); opacity:.55; }
+.seg.scheduled { background:var(--blue); opacity:.75; }
 .seg.running { background:var(--accent); }
 .seg.done { background:#1f6f37; }
 .seg.failed { background:var(--red); }
@@ -44,7 +45,7 @@ main { max-width:900px; margin:0 auto; padding:12px 10px calc(var(--nav-h) + 42p
 .recent { border-top:1px solid var(--border); padding-top:7px; display:flex; flex-direction:column; gap:5px; }
 .task { display:flex; gap:7px; align-items:flex-start; font-size:11px; color:var(--text-2); }
 .dot { width:6px; height:6px; border-radius:50%; margin-top:5px; flex-shrink:0; background:var(--text-3); }
-.dot.pending { background:var(--yellow); } .dot.running { background:var(--accent); } .dot.done { background:#245c33; } .dot.failed { background:var(--red); }
+.dot.pending { background:var(--yellow); } .dot.scheduled { background:var(--blue); } .dot.running { background:var(--accent); } .dot.done { background:#245c33; } .dot.failed { background:var(--red); }
 .task-title { flex:1; word-break:break-word; }
 .runner { color:var(--text-3); font-size:10px; }
 .empty { text-align:center; color:var(--text-3); padding:48px 0; }
@@ -94,16 +95,16 @@ function seg(cls, count, total) {
   return `<div class="seg ${cls}" style="width:${Math.max(3, Math.round(count / Math.max(total, 1) * 100))}%"></div>`;
 }
 function projectCard(p) {
-  const active = p.pending + p.running;
+  const active = p.scheduled + p.pending + p.running;
   const runner = Object.entries(p.runnerMix).sort((a,b) => b[1]-a[1])[0]?.[0] ?? '—';
   return `<section class="project">
     <div class="project-top">
       <div><div class="pname">${esc(p.name)}</div><div class="pdir">${esc(p.dir)}</div></div>
       ${active ? `<div class="badge">${active} active</div>` : ''}
     </div>
-    <div class="bar">${seg('running',p.running,p.total)}${seg('pending',p.pending,p.total)}${seg('done',p.done,p.total)}${seg('failed',p.failed,p.total)}${seg('cancelled',p.cancelled,p.total)}</div>
+    <div class="bar">${seg('running',p.running,p.total)}${seg('scheduled',p.scheduled,p.total)}${seg('pending',p.pending,p.total)}${seg('done',p.done,p.total)}${seg('failed',p.failed,p.total)}${seg('cancelled',p.cancelled,p.total)}</div>
     <div class="counts">
-      <span><strong>${p.total}</strong> total</span><span><strong>${p.pending}</strong> pending</span><span><strong>${p.running}</strong> running</span>
+      <span><strong>${p.total}</strong> total</span>${p.scheduled ? `<span><strong>${p.scheduled}</strong> scheduled</span>` : ''}<span><strong>${p.pending}</strong> pending</span><span><strong>${p.running}</strong> running</span>
       <span><strong>${p.done}</strong> done</span><span><strong>${p.failed}</strong> failed</span><span><strong>${p.worktrees}</strong> WT</span>
       ${p.durableWorktrees ? `<span><strong>${p.durableWorktrees}</strong> durable</span>` : ''}
       <span>${esc(shortRunner(runner))}</span><span>${timeAgo(p.lastActivity)} ago</span>
@@ -116,7 +117,7 @@ async function load() {
   const data = await res.json();
   document.getElementById('s-projects').textContent = data.totalProjects;
   document.getElementById('s-tasks').textContent = data.totalTasks;
-  document.getElementById('s-active').textContent = data.projects.reduce((n,p) => n + p.pending + p.running, 0);
+  document.getElementById('s-active').textContent = data.projects.reduce((n,p) => n + p.scheduled + p.pending + p.running, 0);
   document.getElementById('updated').textContent = new Date().toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
   document.getElementById('projects').innerHTML = data.projects.length ? data.projects.map(projectCard).join('') : '<div class="empty">no project activity yet</div>';
 }

@@ -287,12 +287,16 @@ function renderWorker(s) {
   const elapsed = s.currentTask?.started
     ? (() => { const ms = Date.now() - new Date(s.currentTask.started); const h = Math.floor(ms/3600000); const m = Math.floor((ms%3600000)/60000); return h > 0 ? `${h}h ${m}m` : `${m}m`; })()
     : null;
+  const nextScheduled = s.nextScheduled
+    ? `${esc(s.nextScheduled.runner)} — ${esc(s.nextScheduled.task)} <span style="color:var(--text-3)">(${new Date(s.nextScheduled.scheduledFor).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'})})</span>`
+    : '—';
 
   document.getElementById('worker-rows').innerHTML = [
     ['status',      s.paused ? '<span class="warn">paused</span>' : s.running ? '<span class="ok">running</span>' : '<span class="ok">idle</span>'],
     ['current task',s.currentTask ? `<code style="font-size:11px">${esc(s.currentTask.id)}</code> — ${esc(s.currentTask.task)}` : '—'],
     ['elapsed',     elapsed ? `<span class="warn">${elapsed}</span>` : '—'],
     ['next queued', s.nextTask ? `${esc(s.nextTask.runner)} — ${esc(s.nextTask.task)}` : '—'],
+    ['scheduled',   s.scheduledCount ? `${s.scheduledCount} · ${nextScheduled}` : '—'],
     ['usage gate',  s.usageCheck ? `<span class="${s.usageCheck.safe?'ok':'warn'}">${esc(s.usageCheck.reason)}</span>` : '—'],
     ['poll count',  s.pollCount ?? '—'],
     ['last poll',   s.lastPollResult ? `<span class="${s.lastPollResult.ok?'ok':'warn'}">${esc(s.lastPollResult.reason)}</span>` : '—'],
