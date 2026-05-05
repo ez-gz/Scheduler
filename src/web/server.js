@@ -145,10 +145,11 @@ function normalizeTmuxKey(key) {
 }
 
 function normalizeTaskRequest(body) {
-  const { task, dir, worktree, durableWorktree, runner, priority, resumeSessionId, forkSession } = body;
+  const { task, dir, worktree, durableWorktree, runner, priority, minUsagePct, resumeSessionId, forkSession } = body;
   if (!task?.trim()) throw new Error('task is required');
   if (!dir?.trim()) throw new Error('dir is required');
   const isWorktree = worktree === true || worktree === 'true';
+  const parsedMinUsagePct = minUsagePct != null && minUsagePct !== '' ? Number(minUsagePct) : null;
   return {
     task: task.trim(),
     dir: dir.trim(),
@@ -156,6 +157,7 @@ function normalizeTaskRequest(body) {
     durableWorktree: isWorktree && (durableWorktree === true || durableWorktree === 'true'),
     runner: runner ?? 'claude-sonnet',
     priority: Number(priority ?? 0),
+    minUsagePct: parsedMinUsagePct != null && !Number.isNaN(parsedMinUsagePct) ? parsedMinUsagePct : null,
     resumeSessionId: resumeSessionId ?? null,
     forkSession: forkSession === true || forkSession === 'true',
   };

@@ -13,6 +13,7 @@ const QUEUE_FIELDS = [
   'durableWorktree',
   'runner',
   'priority',
+  'minUsagePct',
   'resumeSessionId',
   'forkSession',
 ];
