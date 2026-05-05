@@ -36,6 +36,7 @@ export function add(data) {
     runner: 'claude',
     model: 'claude-sonnet-4-6',
     priority: 0,
+    minUsagePct: null,
     worktree: false,
     durableWorktree: false,
     worktreeMeta: null,
@@ -64,10 +65,14 @@ export function update(id, updates) {
 
 // Returns next pending task sorted by priority (desc) then created (asc)
 export function next() {
-  const pending = readAll()
+  return listPending()[0] ?? null;
+}
+
+// Returns all pending tasks sorted by priority (desc) then created (asc)
+export function listPending() {
+  return readAll()
     .filter(t => t.status === 'pending')
     .sort((a, b) => b.priority - a.priority || new Date(a.created) - new Date(b.created));
-  return pending[0] ?? null;
 }
 
 export function getStats() {

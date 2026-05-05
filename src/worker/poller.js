@@ -2,7 +2,7 @@ import * as queue from '../queue/store.js';
 import * as scheduled from '../queue/scheduledStore.js';
 import { run } from '../runners/index.js';
 import { isInWindow, loadConfig } from '../scheduler/windowCheck.js';
-import { isUsageSafe } from '../scheduler/usageCheck.js';
+import { findEligibleTask } from '../scheduler/usageCheck.js';
 
 // ── Startup: reap any tasks orphaned by a previous crash/kill ─────────────
 
@@ -99,16 +99,16 @@ export async function poll() {
     return;
   }
 
-  const task = queue.next();
-  if (!task) {
+  const pending = queue.listPending();
+  if (!pending.length) {
     lastPollResult = { ok: true, reason: 'queue empty' };
     return;
   }
 
-  const usageCheck = await isUsageSafe(task);
-  if (!usageCheck.safe) {
-    lastPollResult = { ok: false, reason: usageCheck.reason };
-    console.log(`[worker] skip — ${usageCheck.reason}`);
+  const { task, reason: eligibleReason } = await findEligibleTask(pending);
+  if (!task) {
+    lastPollResult = { ok: false, reason: eligibleReason };
+    console.log(`[worker] skip — ${eligibleReason}`);
     return;
   }
 
@@ -197,12 +197,16 @@ export function forceReset() {
 }
 
 export async function getStatus() {
-  const nextTask = queue.next();
+  const pending = queue.listPending();
   const scheduledItems = scheduled.list('scheduled')
     .sort((a, b) => new Date(a.scheduledFor) - new Date(b.scheduledFor) || b.priority - a.priority || new Date(a.created) - new Date(b.created));
-  const usageCheck = nextTask
-    ? await isUsageSafe(nextTask)
-    : { safe: true, reason: 'queue empty', detail: { provider: null } };
+  const { task: eligibleTask, reason: eligibleReason } = pending.length
+    ? await findEligibleTask(pending)
+    : { task: null, reason: 'queue empty' };
+  const usageCheck = eligibleTask
+    ? { safe: true, reason: eligibleReason, detail: { provider: null } }
+    : { safe: false, reason: eligibleReason, detail: { provider: null } };
+  const nextTask = pending[0] ?? null;
   const windowCheck = isInWindow();
   return {
     running,

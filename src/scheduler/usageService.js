@@ -98,16 +98,86 @@ export async function checkUsageForTask(task) {
         limits.claude
       );
 
+  if (!usage.gate.safe) {
+    return {
+      safe: false,
+      deferred: false,
+      reason: usage.gate.reason,
+      detail: { provider, runner: task?.runner ?? null, gate: usage.gate, usage },
+    };
+  }
+
+  if (task?.minUsagePct != null && usage.available) {
+    const shortPctLeft = usage.shortWindow?.timing?.state === 'reset-assumed'
+      ? 100
+      : (usage.shortWindow?.pctLeft ?? 0);
+    if (shortPctLeft < task.minUsagePct) {
+      return {
+        safe: false,
+        deferred: true,
+        reason: `task requires ≥${task.minUsagePct}% 5h limit remaining; ${shortPctLeft}% available`,
+        detail: { provider, runner: task?.runner ?? null, gate: usage.gate, usage },
+      };
+    }
+  }
+
   return {
-    safe: usage.gate.safe,
+    safe: true,
+    deferred: false,
     reason: usage.gate.reason,
-    detail: {
-      provider,
-      runner: task?.runner ?? null,
-      gate: usage.gate,
-      usage,
-    },
+    detail: { provider, runner: task?.runner ?? null, gate: usage.gate, usage },
   };
+}
+
+// Finds the first eligible task from a sorted list of candidates.
+// Skips tasks whose minUsagePct threshold isn't met yet (deferred).
+// Stops on a global provider block (weekly budget exceeded, usage unavailable).
+export async function findEligibleTask(candidates) {
+  if (!candidates.length) return { task: null, reason: 'no candidates' };
+
+  const limits = getUsageLimits();
+  const usageByProvider = {};
+  const blockedProviders = new Set();
+
+  for (const task of candidates) {
+    const provider = getUsageProviderForRunner(task?.runner);
+
+    if (!provider) {
+      return { task, reason: `runner ${task.runner ?? '<none>'} has no usage gate` };
+    }
+
+    if (blockedProviders.has(provider)) continue;
+
+    if (!usageByProvider[provider]) {
+      usageByProvider[provider] = provider === 'codex'
+        ? decorateUsage('codex', readCodexUsage(), limits.codex)
+        : decorateUsage('claude', await getClaudeUsage({ refresh: false, cwd: task?.dir, allowStale: true }), limits.claude);
+    }
+
+    const usage = usageByProvider[provider];
+
+    if (!usage.gate.safe) {
+      blockedProviders.add(provider);
+      continue;
+    }
+
+    if (task.minUsagePct != null && usage.available) {
+      const shortPctLeft = usage.shortWindow?.timing?.state === 'reset-assumed'
+        ? 100
+        : (usage.shortWindow?.pctLeft ?? 0);
+      if (shortPctLeft < task.minUsagePct) continue;
+    }
+
+    return { task, reason: usage.gate.reason };
+  }
+
+  if (blockedProviders.size > 0) {
+    const blocked = [...blockedProviders];
+    const reason = usageByProvider[blocked[0]]?.gate?.reason ?? `usage limits exceeded for ${blocked.join(', ')}`;
+    return { task: null, reason, blocked: true };
+  }
+
+  return { task: null, reason: 'all pending tasks deferred — usage thresholds not met', deferred: true };
 }
 
 export function getUsageProviderForRunner(runner) {

@@ -445,6 +445,16 @@ input:checked + .slider:before { transform: translateX(17px); background: #000; 
       </div>
     </div>
 
+    <div class="row2" style="margin-top:10px">
+      <div>
+        <div class="form-label">min 5h limit %</div>
+        <input type="number" id="f-min-usage-pct" placeholder="none" min="0" max="100">
+      </div>
+      <div style="display:flex;align-items:flex-end">
+        <div class="hint" style="margin:0">defer until this % of 5h window is free</div>
+      </div>
+    </div>
+
     <div class="toggle-row" id="schedule-row">
       <span>schedule for later</span>
       <label class="toggle">
@@ -997,6 +1007,7 @@ function openModal(resume = null) {
 
   document.getElementById('f-scheduled').checked = false;
   document.getElementById('f-scheduled-for').value = localDateTimeValue(new Date(Date.now() + 60 * 60 * 1000));
+  document.getElementById('f-min-usage-pct').value = '';
   updateScheduleVisibility();
 
   if (resume) {
@@ -1044,10 +1055,13 @@ async function submitTask() {
   btn.disabled = true; btn.textContent = shouldSchedule ? 'scheduling…' : 'adding…';
 
   try {
+    const minUsagePctRaw = document.getElementById('f-min-usage-pct').value;
+    const minUsagePct = minUsagePctRaw !== '' ? parseInt(minUsagePctRaw) : null;
     const body = {
       task, dir,
       runner: document.getElementById('f-runner').value,
       priority: parseInt(document.getElementById('f-priority').value) || 0,
+      ...(minUsagePct != null && !Number.isNaN(minUsagePct) ? { minUsagePct } : {}),
       worktree: resumeState ? false : document.getElementById('f-worktree').checked,
       durableWorktree: resumeState ? false : document.getElementById('f-durable-worktree').checked,
       ...(resumeState ? { resumeSessionId:resumeState.sessionId, forkSession:resumeState.forkSession } : {}),
