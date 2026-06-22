@@ -8,7 +8,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // Runner scripts receive the full task context via env vars and are responsible
 // for all execution logic — worktree setup, agent invocation, cleanup.
 // This registry is intentionally thin: it just spawns and streams.
-export function run(task) {
+export function run(task, options = {}) {
   return new Promise((resolve, reject) => {
     const scriptPath = join(__dirname, `${task.runner}.sh`);
 
@@ -32,12 +32,16 @@ export function run(task) {
     let stderr = '';
 
     proc.stdout.on('data', chunk => {
-      stdout += chunk;
+      const text = chunk.toString();
+      stdout += text;
       process.stdout.write(chunk); // stream to terminal
+      options.onStdout?.(text, stdout);
     });
     proc.stderr.on('data', chunk => {
-      stderr += chunk;
+      const text = chunk.toString();
+      stderr += text;
       process.stderr.write(chunk);
+      options.onStderr?.(text, stderr);
     });
 
     proc.on('error', err => reject(Object.assign(err, { stdout, stderr })));

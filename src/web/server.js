@@ -1,6 +1,6 @@
 import express from 'express';
 import { join, dirname } from 'path';
-import { readFileSync, writeFileSync, watch, existsSync, readdirSync, statSync, openSync, readSync, closeSync } from 'fs';
+import { watch, existsSync, readdirSync, statSync, openSync, readSync, closeSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
 import { execFile } from 'child_process';
@@ -13,10 +13,10 @@ import { getDirs } from './dirs.js';
 import { getAllUsage } from '../scheduler/usageRunner.js';
 import { refreshUsage } from '../scheduler/usageService.js';
 import { loadConfig, saveConfig } from '../scheduler/windowCheck.js';
+import { readTerminals, writeTerminals, terminalName } from '../terminals/store.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(__dirname, 'public');
-const TERMINALS_FILE = join(__dirname, '../../data/terminals.json');
 const execFileAsync = promisify(execFile);
 
 const app = express();
@@ -73,23 +73,6 @@ function projectName(dir) {
 
 function lastActivity(task) {
   return task.completed ?? task.started ?? task.created ?? null;
-}
-
-function readTerminals() {
-  if (!existsSync(TERMINALS_FILE)) return [];
-  try {
-    return JSON.parse(readFileSync(TERMINALS_FILE, 'utf8'));
-  } catch {
-    return [];
-  }
-}
-
-function writeTerminals(items) {
-  writeFileSync(TERMINALS_FILE, JSON.stringify(items, null, 2));
-}
-
-function terminalName(id) {
-  return `scheduler-term-${id}`;
 }
 
 async function tmux(args) {
@@ -507,6 +490,13 @@ app.post('/api/terminals/:id/kill', async (req, res) => {
     const aliveAfter = await terminalExists(terminals[idx].sessionName);
     terminals[idx] = { ...terminals[idx], killedAt: new Date().toISOString() };
     writeTerminals(terminals);
+    if (terminals[idx].taskId) {
+      try {
+        queue.markTmuxSessionKilled(terminals[idx].taskId, terminals[idx].sessionName);
+      } catch {
+        // The terminal registry can outlive queue records.
+      }
+    }
     res.json({ ok: !aliveAfter, terminal: { ...terminals[idx], alive: aliveAfter } });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -538,7 +528,7 @@ app.patch('/api/tasks/:id/status', (req, res) => {
     const updates = { status };
     if (status === 'failed') updates.error = errMsg ?? 'manually marked as failed';
     if (status === 'done' || status === 'failed') updates.completed = updates.completed ?? new Date().toISOString();
-    if (status === 'pending') { updates.started = null; updates.completed = null; updates.output = null; updates.error = null; }
+    if (status === 'pending') { updates.started = null; updates.completed = null; updates.output = null; updates.error = null; updates.tmuxMeta = null; }
     const updated = queue.update(req.params.id, updates);
     res.json({ ok: true, task: updated });
   } catch (err) {
@@ -561,6 +551,36 @@ app.get('/api/tasks/:id/tail', (req, res) => {
   const tasks = queue.list();
   const task = tasks.find(t => t.id === req.params.id);
   if (!task) return res.status(404).json({ error: 'not found' });
+
+  if (task.tmuxMeta?.sessionName) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    let last = '';
+    let closed = false;
+    async function tick() {
+      if (closed) return;
+      try {
+        const alive = await terminalExists(task.tmuxMeta.sessionName);
+        const output = alive ? await captureTerminal(task.tmuxMeta.sessionName) : '[session ended]';
+        if (output !== last) {
+          last = output;
+          res.write(`data: ${JSON.stringify({ type: 'tmux_capture', text: output, alive })}\n\n`);
+        }
+      } catch (err) {
+        res.write(`data: ${JSON.stringify({ type: 'tmux_capture', text: err.message, alive: false })}\n\n`);
+      }
+    }
+
+    tick();
+    const interval = setInterval(tick, 1000);
+    req.on('close', () => {
+      closed = true;
+      clearInterval(interval);
+    });
+    return;
+  }
 
   const encodedDir = task.dir.replace(/\//g, '-');
   const projectDir = join(homedir(), '.claude', 'projects', encodedDir);

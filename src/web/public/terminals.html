@@ -187,6 +187,11 @@ async function load() {
   document.getElementById('sessions').innerHTML = terminals.length
     ? terminals.map(t => `<div class="session ${selected===t.id?'active':''}" onclick="selectTerminal('${t.id}')"><div class="sname"><span>${esc(t.name)}</span><span class="state ${t.alive?'on':''}">${t.alive?'live':'dead'}</span></div><div class="cwd">${esc(t.cwd)}</div></div>`).join('')
     : '<div class="empty" style="padding:24px 10px">no sessions</div>';
+
+  const requested = decodeURIComponent(location.hash.slice(1));
+  if (!selected && requested && terminals.some(t => t.id === requested)) {
+    selectTerminal(requested);
+  }
 }
 async function createTerminal() {
   const name = document.getElementById('name').value.trim();
@@ -227,6 +232,7 @@ function selectTerminal(id) {
   selected = id;
   const t = terminals.find(x => x.id === id);
   if (!t) return;
+  if (location.hash.slice(1) !== encodeURIComponent(id)) history.replaceState(null, '', `/terminals.html#${encodeURIComponent(id)}`);
   renderTerminal(t);
   load();
   if (source) source.close();

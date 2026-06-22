@@ -215,11 +215,16 @@ Current runners:
 | `claude-haiku` | Claude | `claude-haiku-4-5-20251001` |
 | `claude-sonnet` | Claude | `claude-sonnet-4-6` |
 | `claude-opus` | Claude | `claude-opus-4-6` |
+| `claude-haiku-tmux` | Claude | Interactive Claude Code in tmux, `claude-haiku-4-5-20251001` |
+| `claude-sonnet-tmux` | Claude | Interactive Claude Code in tmux, `claude-sonnet-4-6` |
+| `claude-opus-tmux` | Claude | Interactive Claude Code in tmux, `claude-opus-4-6` |
 | `codex-gpt-5.4-mini` | Codex | `gpt-5.4-mini` |
 | `codex-gpt-5.4` | Codex | `gpt-5.4` |
 | `test` | Local shell | No-token smoke test |
 
-Claude runners call `claude` with `--dangerously-skip-permissions`.
+Claude runners call `claude` with `--dangerously-skip-permissions`. The plain `claude-*` runners use `claude -p`; the `claude-*-tmux` runners use the generic interactive tmux backend, launch a normal Claude Code session, paste the task, and wait for a scheduler completion marker.
+
+If a tmux-backed task is interrupted, Scheduler marks its session as an orphan and blocks new work in the same Git repo for one hour. Killing the attached terminal clears that block immediately.
 
 Codex runners call `codex exec` with `--dangerously-bypass-approvals-and-sandbox` and `--skip-git-repo-check`.
 

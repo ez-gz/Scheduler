@@ -592,6 +592,10 @@ function renderJsonlLine(line) {
   let ev;
   try { ev = JSON.parse(line); } catch { return `<div class="jl-raw">${esc(line)}</div>`; }
 
+  if (ev.type === 'tmux_capture') {
+    return `<pre style="font-size:11px;font-family:var(--font);line-height:1.45;color:#d6d6d6;white-space:pre-wrap;word-break:break-word;max-height:440px;overflow-y:auto;overscroll-behavior:contain">${esc(ev.text ?? '')}</pre>`;
+  }
+
   if (ev.type === 'assistant' && ev.message?.content) {
     return ev.message.content.map(block => {
       if (block.type === 'text') {
@@ -782,6 +786,8 @@ function metaLine(t, queuePos) {
   if (t.status !== 'scheduled' && t.scheduledFor) parts.push(`scheduled ${esc(scheduleStamp(t.scheduledFor))}`);
   if (t.worktree) parts.push('WT');
   if (t.durableWorktree || t.worktreeMeta?.kept) parts.push('durable');
+  if (t.tmuxMeta?.sessionName) parts.push('tmux');
+  if (t.tmuxMeta?.lifecycle === 'orphaned') parts.push(`<span class="m-red">orphan</span>`);
   if (t.priority > 0) parts.push(`p${t.priority}`);
 
   const sc = t.status === 'running' || t.status === 'scheduled' ? 'm-accent' : t.status === 'failed' ? 'm-red' : t.status === 'pending' ? 'm-muted' : '';
@@ -799,6 +805,7 @@ function taskCard(t, queuePos) {
   const isExp = !isScheduled && (t.status === 'done' || t.status === 'failed' || t.status === 'running' || t.output || t.error);
   const canResume = t.status === 'done' && !t.worktree && t.sessionId;
   const canBranch = canResume && t.runner?.startsWith('claude');
+  const terminalId = t.tmuxMeta?.terminalId ?? t.tmuxMeta?.id ?? null;
 
   return `
     <div class="task-card status-${t.status}" id="card-${t.id}">
@@ -818,9 +825,10 @@ function taskCard(t, queuePos) {
         <div class="task-meta">${metaLine(t, queuePos)}</div>
       </div>
       ${isExp ? `<div class="task-output" id="out-${t.id}"><div class="out-loading">loading…</div></div>` : ''}
-      ${canResume ? `
+      ${(canResume || terminalId) ? `
       <div class="sess-acts">
-        <button class="rbtn" onclick="continueTask(event,'${t.id}')">↩ continue</button>
+        ${terminalId ? `<button class="rbtn" onclick="openTerminal(event,'${terminalId}')">⌁ terminal</button>` : ''}
+        ${canResume ? `<button class="rbtn" onclick="continueTask(event,'${t.id}')">↩ continue</button>` : ''}
         ${canBranch ? `<button class="rbtn" onclick="branchTask(event,'${t.id}')">⑂ branch</button>` : ''}
       </div>` : ''}
     </div>`;
@@ -832,6 +840,7 @@ function renderOutput(task) {
     task.completed ? `done ${timeAgo(task.completed)} ago`  : null,
     task.dir,
     task.worktreeMeta?.path ? `worktree ${task.worktreeMeta.path}` : null,
+    task.tmuxMeta?.sessionName ? `tmux ${task.tmuxMeta.sessionName}` : null,
   ].filter(Boolean);
   let content;
   if (task.output) {
@@ -875,7 +884,13 @@ async function toggleExpand(id, expandable) {
     activeSources[id] = src;
     let rPending = false;
     src.onmessage = e => {
-      tailLines[id].push(e.data);
+      try {
+        const ev = JSON.parse(e.data);
+        if (ev.type === 'tmux_capture') tailLines[id] = [e.data];
+        else tailLines[id].push(e.data);
+      } catch {
+        tailLines[id].push(e.data);
+      }
       if (!rPending) {
         rPending = true;
         requestAnimationFrame(() => {
@@ -943,6 +958,11 @@ async function branchTask(e, id) {
   openModal({ sessionId:t.sessionId, runner:t.runner, dir:t.dir, forkSession:true, sourceId:id });
 }
 
+function openTerminal(e, terminalId) {
+  e.stopPropagation();
+  window.location.href = `/terminals.html#${encodeURIComponent(terminalId)}`;
+}
+
 async function toggleWorker() {
   await fetch(workerPaused ? '/api/worker/resume' : '/api/worker/pause', {method:'POST'});
   loadAll();
@@ -962,6 +982,9 @@ const RUNNERS = [
   { value:'claude-sonnet',      family:'claude' },
   { value:'claude-haiku',       family:'claude' },
   { value:'claude-opus',        family:'claude' },
+  { value:'claude-sonnet-tmux', family:'claude' },
+  { value:'claude-haiku-tmux',  family:'claude' },
+  { value:'claude-opus-tmux',   family:'claude' },
   { value:'codex-gpt-5.4',      family:'codex'  },
   { value:'codex-gpt-5.4-mini', family:'codex'  },
 ];

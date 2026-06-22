@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const QUEUE_FILE = join(__dirname, '../../data/queue.jsonl');
+const TMUX_ORPHAN_BLOCK_MS = 60 * 60 * 1000;
 
 function ensureFile() {
   const dir = dirname(QUEUE_FILE);
@@ -21,6 +22,18 @@ function readAll() {
 function writeAll(tasks) {
   ensureFile();
   writeFileSync(QUEUE_FILE, tasks.map(t => JSON.stringify(t)).join('\n') + (tasks.length ? '\n' : ''));
+}
+
+function orphanedTmuxMeta(task, reason, nowIso = new Date().toISOString()) {
+  if (!task?.tmuxMeta?.sessionName) return task?.tmuxMeta ?? null;
+  const blockUntil = new Date(new Date(nowIso).getTime() + TMUX_ORPHAN_BLOCK_MS).toISOString();
+  return {
+    ...task.tmuxMeta,
+    lifecycle: 'orphaned',
+    orphanedAt: nowIso,
+    orphanReason: reason,
+    blockUntil,
+  };
 }
 
 export function add(data) {
@@ -40,6 +53,7 @@ export function add(data) {
     worktree: false,
     durableWorktree: false,
     worktreeMeta: null,
+    tmuxMeta: null,
     sessionId: null,
     resumeSessionId: null,
     forkSession: false,
@@ -52,6 +66,10 @@ export function add(data) {
 export function list(status = null) {
   const tasks = readAll();
   return status ? tasks.filter(t => t.status === status) : tasks;
+}
+
+export function get(id) {
+  return readAll().find(t => t.id === id) ?? null;
 }
 
 export function update(id, updates) {
@@ -95,11 +113,54 @@ export function reapStaleRunning(reason = 'process restarted with task in-flight
   const now = new Date().toISOString();
   const updated = tasks.map(t =>
     t.status === 'running'
-      ? { ...t, status: 'failed', completed: now, error: reason }
+      ? { ...t, status: 'failed', completed: now, error: reason, tmuxMeta: orphanedTmuxMeta(t, reason, now) }
       : t
   );
   writeAll(updated);
   return stale.length;
+}
+
+export function listActiveTmuxOrphans(now = new Date()) {
+  const nowMs = now.getTime();
+  return readAll().filter(t => {
+    if (t.tmuxMeta?.lifecycle !== 'orphaned') return false;
+    const blockUntil = new Date(t.tmuxMeta.blockUntil ?? 0).getTime();
+    return Number.isFinite(blockUntil) && blockUntil > nowMs;
+  });
+}
+
+export function markTmuxOrphaned(id, reason = 'tmux session orphaned') {
+  const tasks = readAll();
+  const idx = tasks.findIndex(t => t.id === id);
+  if (idx === -1) throw new Error(`Task ${id} not found`);
+  const now = new Date().toISOString();
+  tasks[idx] = {
+    ...tasks[idx],
+    status: 'failed',
+    completed: tasks[idx].completed ?? now,
+    error: tasks[idx].error ?? reason,
+    tmuxMeta: orphanedTmuxMeta(tasks[idx], reason, now),
+  };
+  writeAll(tasks);
+  return tasks[idx];
+}
+
+export function markTmuxSessionKilled(taskId, sessionName) {
+  const tasks = readAll();
+  const idx = tasks.findIndex(t => t.id === taskId);
+  if (idx === -1) throw new Error(`Task ${taskId} not found`);
+  if (tasks[idx].tmuxMeta?.sessionName !== sessionName) return tasks[idx];
+  tasks[idx] = {
+    ...tasks[idx],
+    tmuxMeta: {
+      ...tasks[idx].tmuxMeta,
+      lifecycle: 'killed',
+      killedAt: new Date().toISOString(),
+      blockUntil: null,
+    },
+  };
+  writeAll(tasks);
+  return tasks[idx];
 }
 
 // Re-enqueue a failed task by resetting it to pending.
@@ -108,7 +169,7 @@ export function requeue(id) {
   const idx = tasks.findIndex(t => t.id === id);
   if (idx === -1) throw new Error(`Task ${id} not found`);
   if (tasks[idx].status !== 'failed') throw new Error(`Task ${id} is not failed (status: ${tasks[idx].status})`);
-  tasks[idx] = { ...tasks[idx], status: 'pending', started: null, completed: null, output: null, error: null };
+  tasks[idx] = { ...tasks[idx], status: 'pending', started: null, completed: null, output: null, error: null, tmuxMeta: null };
   writeAll(tasks);
   return tasks[idx];
 }
