@@ -4,6 +4,37 @@ Scheduler is a local web control plane for sending coding tasks to agent CLIs th
 
 It is built for one practical workflow: keep the real development environment on your personal machine, then submit and monitor Claude Code or Codex work from a browser while you are away. Scheduler queues tasks, checks schedule windows and usage budgets, starts the selected runner, and records the result.
 
+## Fast Path
+
+Use this path on a fresh clone when you just want Scheduler running locally.
+
+```bash
+git clone <repo-url> Scheduler
+cd Scheduler
+npm install
+cp configs/schedule.example.json configs/schedule.json
+npm start
+```
+
+Open:
+
+- `http://localhost:3747` for the queue UI.
+- `http://localhost:3747/admin.html` for worker status, usage gates, and worktree cleanup.
+- `http://localhost:3747/terminals.html` for tmux-backed shell sessions.
+
+Run the no-token smoke test from the UI with runner `test`, or from another terminal:
+
+```bash
+curl -s -X POST http://127.0.0.1:3747/api/tasks \
+  -H 'content-type: application/json' \
+  -d "{\"task\":\"smoke test\",\"dir\":\"$PWD\",\"runner\":\"test\",\"worktree\":false}"
+
+curl -s -X POST http://127.0.0.1:3747/api/worker/force-pull
+curl -s http://127.0.0.1:3747/api/queue
+```
+
+If that task moves to `done`, the server, queue, worker, runner dispatch, and output capture are working.
+
 ## What This Does
 
 - Runs a local web UI at `http://localhost:3747`.
@@ -25,15 +56,20 @@ Tasks run on your machine, with your local shell environment, credentials, SSH k
 
 ## Requirements
 
+Base requirements:
+
 - macOS. Linux may work, but this project is designed around macOS.
 - Node.js 18 or newer.
 - `npm`.
 - `git`.
-- `tmux`.
-- Claude Code CLI, available as `claude`.
-- Codex CLI, available as `codex`.
-- GitHub CLI, available as `gh`, if you want worktree tasks to push branches and open PRs.
-- `ngrok`, if you want remote browser access.
+- `tmux`, for terminal sessions, Claude usage refresh, and interactive Claude runners.
+
+Feature-specific requirements:
+
+- Claude Code CLI, available as `claude`, for Claude runners.
+- Codex CLI, available as `codex`, for Codex runners.
+- GitHub CLI, available as `gh`, for worktree tasks that push branches and open PRs.
+- `ngrok`, for remote browser access.
 
 Install common tools with Homebrew:
 
@@ -62,17 +98,22 @@ node --version
 npm --version
 git --version
 tmux -V
+```
+
+Check feature-specific tools if you plan to use those paths:
+
+```bash
 claude --version
 codex --version
 gh --version
 ngrok version
 ```
 
-If one command fails, install or fix that tool before continuing.
+If one base command fails, install or fix that tool before continuing. If a feature-specific command fails, skip that feature until the tool is installed and authenticated.
 
 ### 3. Authenticate Local Tools
 
-Run each CLI once in a normal terminal session so it can complete any interactive login or first-run setup:
+Run each CLI you plan to use once in a normal terminal session so it can complete any interactive login or first-run setup:
 
 ```bash
 claude
@@ -122,6 +163,15 @@ Open:
 
 By default the server binds to `127.0.0.1`, so it is local-only.
 
+To use a different port or host:
+
+```bash
+PORT=3750 npm start
+HOST=0.0.0.0 PORT=3747 npm start
+```
+
+Prefer the default local-only host unless you are intentionally exposing Scheduler behind another access-control layer.
+
 ### 6. Run A No-Cost Smoke Test
 
 Use the `test` runner before spending agent tokens.
@@ -134,6 +184,17 @@ From the UI, submit a task with:
 - Task text: `smoke test`
 
 The test runner writes to `/tmp/sched-out-<task-id>.txt` and exercises the queue, worker, runner registry, and output capture without calling Claude or Codex.
+
+Equivalent terminal smoke test:
+
+```bash
+curl -s -X POST http://127.0.0.1:3747/api/tasks \
+  -H 'content-type: application/json' \
+  -d "{\"task\":\"smoke test\",\"dir\":\"$PWD\",\"runner\":\"test\",\"worktree\":false}"
+
+curl -s -X POST http://127.0.0.1:3747/api/worker/force-pull
+curl -s http://127.0.0.1:3747/api/queue
+```
 
 ### 7. Check Worker Health
 
@@ -157,6 +218,8 @@ If the task does not run, check:
 Submit a small in-place task with `claude-sonnet`, `codex-gpt-5.4-mini`, or another configured runner.
 
 Use a low-risk project directory first. The runner is launched with dangerous permissions enabled, so the selected agent can modify files in that directory.
+
+For attachable Claude Code execution, use `claude-sonnet-tmux`. Scheduler launches a normal interactive Claude Code session in tmux, pastes the prompt, watches for a completion marker, and keeps the terminal available from `terminals.html`.
 
 ### 9. Try Worktree Mode
 
@@ -228,6 +291,8 @@ If a tmux-backed task is interrupted, Scheduler marks its session as an orphan a
 
 Codex runners call `codex exec` with `--dangerously-bypass-approvals-and-sandbox` and `--skip-git-repo-check`.
 
+Use the plain runners when you want the old headless execution path. Use the `*-tmux` runners when you want an attachable live agent session that can be inspected or unstuck from the browser.
+
 ## Operating Model
 
 Scheduler has two main pieces:
@@ -265,9 +330,12 @@ If you are an AI coding agent working in this repository, start here.
 - `src/queue/scheduledStore.js`: JSONL scheduled-task storage and due-task promotion.
 - `src/runners/index.js`: runner dispatch.
 - `src/runners/_claude.sh`: shared Claude runner behavior.
+- `src/runners/_interactive_tmux.sh`: provider-neutral tmux runner backend.
+- `src/runners/_claude_tmux.sh`: Claude Code adapter for the tmux backend.
 - `src/runners/_codex.sh`: shared Codex runner behavior.
 - `src/scheduler/windowCheck.js`: schedule config loading and window enforcement.
 - `src/scheduler/usageCheck.js`, `src/scheduler/usageRunner.js`, and `src/scheduler/usageService.js`: usage gate logic.
+- `src/terminals/store.js`: tmux terminal registry used by the UI and tmux runners.
 
 ### Do Not Treat Local Data As Source
 
@@ -308,6 +376,7 @@ Task records may contain:
 - `dir`
 - `runner`
 - `priority`
+- `minUsagePct`
 - `worktree`
 - `durableWorktree`
 - `output`
@@ -318,6 +387,7 @@ Task records may contain:
 - `resumeSessionId`
 - `forkSession`
 - `worktreeMeta`
+- `tmuxMeta`
 - `finalMessage`
 
 If you add fields, keep old records readable.
@@ -348,10 +418,10 @@ This avoids spending agent tokens for basic queue, worker, or API bugs.
 
 ```bash
 npm install
-npm start
+npm run check
 ```
 
-There is currently no dedicated test script in `package.json`. Use the `test` runner smoke test for end-to-end validation.
+There is currently no dedicated test script in `package.json`. Use `npm start` plus the `test` runner smoke test for end-to-end validation.
 
 ## Config Reference
 
@@ -418,11 +488,18 @@ src/
       Maps a task runner name to a shell script.
     _claude.sh
       Shared Claude runner logic.
+    _claude_tmux.sh
+      Claude Code profile for the generic tmux runner.
     _codex.sh
       Shared Codex runner logic.
+    _interactive_tmux.sh
+      Provider-neutral tmux runner backend.
     claude-haiku.sh
     claude-sonnet.sh
     claude-opus.sh
+    claude-haiku-tmux.sh
+    claude-sonnet-tmux.sh
+    claude-opus-tmux.sh
     codex-gpt-5.4-mini.sh
     codex-gpt-5.4.sh
     test.sh
@@ -436,6 +513,10 @@ src/
       Task-aware usage wrapper.
     usageService.js
       Codex usage parsing, Claude usage probing, and usage cache.
+
+  terminals/
+    store.js
+      Local tmux terminal/session registry.
 
   web/
     server.js
@@ -551,6 +632,15 @@ PORT=3750 npm start
 - A usage gate may be blocking the selected provider.
 - Another task may already be running.
 - The selected runner script may not exist.
+- A same-repo tmux orphan may be blocking new work for up to one hour.
+
+### Tmux Runner Does Not Start
+
+- Confirm `tmux -V` works.
+- Confirm `claude` starts in a normal terminal before using `claude-*-tmux`.
+- Open `http://localhost:3747/terminals.html` and check whether a session was created.
+- If the task is marked orphaned, kill the attached terminal to clear the same-repo block.
+- If startup times out, increase `CLAUDE_TMUX_STARTUP_TIMEOUT_SECONDS` or `INTERACTIVE_TMUX_STARTUP_TIMEOUT_SECONDS`.
 
 ### Worktree Task Fails
 
@@ -584,6 +674,7 @@ Scheduler is powerful because it uses your real machine. That is also the main r
 ## Useful Commands
 
 ```bash
+npm run check
 npm start
 npm run tunnel -- --auth scheduler-user:strong-password
 node src/worker/poller.js

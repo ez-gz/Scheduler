@@ -7,7 +7,8 @@
     "start": "node src/index.js",
     "worker": "node src/worker/poller.js",
     "web": "node src/web/server.js",
-    "tunnel": "bash src/tunnel.sh"
+    "tunnel": "bash src/tunnel.sh",
+    "check": "for f in src/runners/*.sh; do bash -n \"$f\"; done && node --check src/queue/store.js && node --check src/runners/index.js && node --check src/worker/poller.js && node --check src/web/server.js && node --check src/terminals/store.js"
   },
   "dependencies": {
     "express": "^4.18.2"
